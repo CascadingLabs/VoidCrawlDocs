@@ -1,20 +1,22 @@
 ---
 title: Contributing
-description: How to contribute to VoidCrawl and who maintains the project.
+description: How to contribute to the VoidCrawl documentation and who maintains the project.
 slug: contributing
 ---
 
 import { Steps } from '@astrojs/starlight/components';
 
-Contributions are welcome. Below is what you need to get started.
+Thanks for your interest in contributing to VoidCrawl Docs! This guide covers how to get set up and what we expect from pull requests.
 
-## Setting Up
+## Clone & Setup
 
 <Steps>
-1. Install with dev dependencies
+1. Clone the repository
 
    ```bash
-   uv sync --all-groups
+   git clone https://github.com/CascadingLabs/VoidCrawlDocs.git
+   cd VoidCrawlDocs
+   bun install
    ```
 
 2. Install the pre-commit hooks
@@ -23,40 +25,81 @@ Contributions are welcome. Below is what you need to get started.
    uvx prek install
    ```
 
-3. Happy Coding!
+3. Run the dev server
+
+   ```bash
+   bun run dev
+   ```
 
 </Steps>
 
-## Tools
+**Prerequisites:**
+
+| Tool | Version | Install |
+|------|---------|---------|
+| Node.js | >= 24 (LTS) | [nodejs.org](https://nodejs.org) |
+| Bun | >= 1.3.11 | [bun.sh](https://bun.sh) |
+
+> **Why Node.js?** Astro's build toolchain requires Node.js internally even when Bun is the package manager and script runner.
+
+## Linting & Formatting
+
+We use [Biome](https://biomejs.dev) for linting and formatting. The config lives in `biome.json`.
+
+**Key rules:**
+
+- Tab indentation, 80-char line width
+- Single quotes, trailing commas, semicolons
+- No unused imports (error), no unused variables (warn)
+- Some rules relaxed for `.astro` files (see `biome.json` overrides)
+
+### Commands
 
 | Tool | Purpose | Command |
 |------|---------|---------|
-| **Ruff** | Linting & Formatting | `uv run ruff check .` |
-| **Mypy** | Type Checking | `uv run mypy .` |
-| **Pytest** | Testing | `uv run pytest` |
+| **Biome** | Lint | `bun run lint` |
+| **Biome** | Format | `bun run format` |
+| **Biome** | Lint + format (auto-fix) | `bun run check` |
 | **Prek** | Git Hooks | `uvx prek run --all-files` |
 
-## Commit Guidelines
+CI runs `biome check` on every push and PR. Your PR must pass this check.
 
-We prefer (don't require) [conventional commits](https://www.conventionalcommits.org/):
+## Issues
 
-```bash
-git commit -m "feat: add stealth fingerprint rotation"
-git commit -m "fix: handle CDP session timeout"
-git commit -m "docs: update quickstart examples"
+We use [GitHub issue forms](https://github.com/CascadingLabs/VoidCrawlDocs/issues/new/choose) for all issues. Pick the template that fits:
+
+- **Bug Report** -something is broken or behaving unexpectedly.
+- **Feature Request** -suggest a new feature or improvement.
+- **Question** -ask a question about usage or internals.
+- **Ticket** -internal planning ticket for tracked work.
+
+Blank issues are disabled -please use a template so we have the context we need to help.
+
+## Pull Request Rules
+
+1. **Branch from `main`** -create a feature branch (`feat/...`, `fix/...`, `docs/...`).
+2. **Keep PRs focused** -one logical change per PR.
+3. **Pass CI** -Biome check and build must succeed.
+4. **Use the PR template** -every PR auto-fills a template. Fill in all sections:
+   - **Intent** -what the PR does and why.
+   - **Changes** -a summary of what was changed.
+   - **GenAI usage** -check the box and describe how AI was used, if applicable. All AI-generated code must be reviewed line-by-line.
+   - **Risks** -any risks or side effects this PR might introduce.
+5. **Link an issue** -reference the issue your PR addresses with `Closes #<number>`.
+
+### Commit Conventions
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+docs: update quickstart guide
+fix: correct broken link in API reference
+feat: add new tutorial section
 ```
 
-**Commit types:** `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+## License
 
-## Pull Request Guidelines
-
-When opening a PR, please include:
-
-1. **Intent** -- what the PR does and why.
-2. **Changes** -- a summary of what was changed.
-3. **GenAI usage** -- if you used AI to write any of the code, include the prompts you used.
-4. **Risks** -- any risks or side effects this PR might introduce.
-5. **Docs** -- if needed, there should be a related PR to the [docs repository](https://github.com/CascadingLabs/VoidCrawlDocs)
+Contributions are licensed under Apache-2.0, matching the project.
 
 ---
 

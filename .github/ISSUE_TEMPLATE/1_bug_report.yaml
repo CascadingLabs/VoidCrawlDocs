@@ -7,7 +7,7 @@ body:
     attributes:
       label: Initial Checks
       options:
-        - label: I'm using the latest version of VoidCrawl
+        - label: I'm using the latest version of VoidCrawl Docs
           required: true
         - label: I've searched existing issues before opening this one
           required: true
@@ -26,7 +26,7 @@ body:
     attributes:
       label: Steps to Reproduce
       description: |
-        Provide a minimal, reproducible example. Include the code snippet, browser target, and steps to trigger the bug.
+        Provide a minimal, reproducible example. Include commands, code, or configuration that triggers the bug.
         The easier it is to reproduce, the faster we can fix it.
       placeholder: |
         1. Run `...`
@@ -38,17 +38,17 @@ body:
     id: logs
     attributes:
       label: Error Output / Logs
-      description: Paste the full error message or relevant console output.
+      description: Paste the full error message or relevant log output.
       render: shell
     validations:
       required: false
 
   - type: input
-    id: python-version
+    id: version
     attributes:
-      label: Python Version
-      description: Check with `python --version`
-      placeholder: e.g., 3.12.4
+      label: "VoidCrawl Docs Version"
+      description: "Paste the page URL or note which documented version is affected"
+      placeholder: "e.g., https://cascadinglabs.com/voidcrawl/quickstart or v0.1.0"
     validations:
       required: true
 

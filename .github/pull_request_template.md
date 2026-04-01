@@ -24,6 +24,6 @@
 ## Checklist
 
 - [ ] Branch is based on `main`
-- [ ] CI passes (lint, build)
-- [ ] Changes are focused -one logical change per PR
+- [ ] CI passes (lint, type check, tests)
+- [ ] Changes are focused (one logical change per PR)
 - [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
