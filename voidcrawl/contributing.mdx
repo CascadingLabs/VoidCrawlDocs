@@ -1,0 +1,107 @@
+---
+title: Contributing
+description: How to contribute to VoidCrawl and who maintains the project.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+Contributions are welcome. VoidCrawl is a hybrid Rust/Python project -- below is what you need to get started with both sides.
+
+## Setting Up
+
+<Steps>
+1. Clone and build
+
+   ```bash
+   git clone https://github.com/CascadingLabs/VoidCrawl
+   cd VoidCrawl
+   ./build.sh
+   ```
+
+2. Install all Python dependency groups
+
+   ```bash
+   uv sync --all-groups
+   ```
+
+3. Install the pre-commit hooks
+
+   ```bash
+   uvx prek install
+   ```
+
+4. Happy Coding!
+
+</Steps>
+
+## Tools
+
+### Rust
+
+| Tool | Purpose | Command |
+|------|---------|---------|
+| **cargo check** | Type checking | `cargo check` |
+| **Clippy** | Linting | `cargo clippy --workspace --all-targets` |
+| **rustfmt** | Formatting | `cargo +nightly fmt --all` |
+| **cargo test** | Integration tests | `cargo test -p void_crawl_core -- --test-threads=1` |
+
+### Python
+
+| Tool | Purpose | Command |
+|------|---------|---------|
+| **Ruff** | Linting & Formatting | `uv run ruff check .` / `uv run ruff format` |
+| **Mypy** | Type Checking | `uv run mypy` |
+| **Pytest** | Testing | `uv run pytest tests/ -v` |
+| **Prek** | Git Hooks | `uvx prek run --all-files` |
+
+## Testing
+
+Rust integration tests require Chrome and must run single-threaded (they share a browser process):
+
+```bash
+cargo test -p void_crawl_core -- --test-threads=1
+```
+
+Python integration tests require the extension to be built first (`./build.sh`):
+
+```bash
+uv run pytest tests/ -v
+```
+
+## Commit Guidelines
+
+We prefer (don't require) [conventional commits](https://www.conventionalcommits.org/):
+
+```bash
+git commit -m "feat: add new pool eviction strategy"
+git commit -m "fix: handle CDP timeout on slow networks"
+git commit -m "docs: update stealth mode guide"
+```
+
+**Commit types:** `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+
+## Pull Request Guidelines
+
+When opening a PR, please include:
+
+1. **Intent** -- what the PR does and why.
+2. **Changes** -- a summary of what was changed.
+3. **GenAI usage** -- if you used AI to write any of the code, include the prompts you used.
+4. **Risks** -- any risks or side effects this PR might introduce.
+5. **Docs** -- if needed, there should be a related PR to the [docs repository](https://github.com/CascadingLabs/VoidCrawlDocs)
+
+## Important Rules
+
+- Never use `time.sleep()` -- always `asyncio.sleep()` or tenacity
+- Never use `unittest` -- always pytest + pytest-asyncio
+- Never use `std::sync::Mutex` in Rust -- always `tokio::sync::Mutex`
+- Never acquire GIL inside a `tokio::spawn` -- deadlock risk
+
+---
+
+## Core Maintainers
+
+| Name | Affiliation |
+|------|------------|
+| [Andrew Berg](https://github.com/AndrewPBerg) | College of Charleston, Cascading Labs |
+| [Houston Miles](https://github.com/HoustonMiles) | College of Charleston, Cascading Labs |

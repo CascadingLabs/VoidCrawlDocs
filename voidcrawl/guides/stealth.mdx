@@ -1,0 +1,181 @@
+---
+title: Stealth Mode
+description: How VoidCrawl avoids bot detection with minimal-footprint anti-detection patches.
+---
+
+import { Card } from '@astrojs/starlight/components';
+
+VoidCrawl uses a **minimal-footprint** stealth strategy inspired by undetected-chromedriver<sup>[◑](#ref-3)</sup>, zendriver<sup>[△](#ref-1)</sup>, and nodriver<sup>[○](#ref-2)</sup>. Stealth is **enabled by default**.
+
+## Philosophy: Less Is More
+
+Most browser automation tools try to _spoof_ every fingerprint signal -- fake plugins, fake WebGL, fake user-agent strings. This backfires against modern WAFs (Akamai, Cloudflare, PerimeterX) because:
+
+1. **Spoofed values are inconsistent.** A hardcoded `Chrome/131` user-agent on a system running Chromium 146 is an instant flag.
+
+2. **The spoofing itself is detectable.** Each `Page.addScriptToEvaluateOnNewDocument` CDP call is a fingerprint. Overriding `navigator.plugins` with a Proxy/getter behaves differently from the real `PluginArray` prototype.
+
+3. **The automation signal isn't in JS -- it's in Chrome's launch flags.** chromiumoxide's default flags include `--enable-automation`, which tells every WAF "I'm automated" before any page loads.
+
+VoidCrawl's approach: **don't fake anything** except the one property Chrome explicitly sets for automation (`navigator.webdriver`). Instead, launch Chrome with clean flags that don't advertise automation.
+
+## What Changed from chromiumoxide Defaults
+
+### Removed (toxic flags)
+
+| Flag | Why it's bad |
+|------|-------------|
+| `--enable-automation` | Literally opts in to automation detection |
+| `--disable-extensions` | Normal Chrome always has extensions support |
+| `--enable-blink-features=IdleDetection` | Unusual feature that fingerprints automation |
+
+### Added (zendriver flags)
+
+| Flag | Purpose |
+|------|---------|
+| `--disable-blink-features=AutomationControlled` | Removes Chrome's automation-controlled blink feature |
+| `--disable-features=IsolateOrigins,site-per-process` | Disables site isolation used for fingerprinting |
+| `--no-pings` | Suppresses background pings |
+| `--disable-component-update` | Prevents background update checks |
+| `--homepage=about:blank` | Clean startup page |
+
+## What the JS Stealth Layer Does
+
+Only two patches are injected via `addScriptToEvaluateOnNewDocument`:
+
+### 1. `navigator.webdriver` Removal
+
+Chrome explicitly sets `navigator.webdriver = true` when connected via CDP. VoidCrawl deletes it:
+
+```javascript
+delete Object.getPrototypeOf(navigator).webdriver;
+Object.defineProperty(navigator, 'webdriver', {
+    get: () => undefined,
+    configurable: true,
+});
+```
+
+### 2. Force-Open Shadow DOMs
+
+Cloudflare Turnstile and similar WAF challenges render inside closed shadow roots. VoidCrawl forces all `attachShadow` calls to use `mode: 'open'`:
+
+```javascript
+Element.prototype._attachShadow = Element.prototype.attachShadow;
+Element.prototype.attachShadow = function(init) {
+    return this._attachShadow({ ...init, mode: 'open' });
+};
+```
+
+### What We Don't Patch (and why)
+
+| Signal | Why we leave it alone |
+|--------|----------------------|
+| `navigator.plugins` | Real Chrome already populates this. Faking it creates detectable inconsistencies. |
+| `navigator.userAgent` | We use Chrome's real UA. Hardcoding a version creates a mismatch. |
+| WebGL vendor/renderer | The real GPU info is more convincing than any fake string. |
+| `window.chrome.runtime` | Real Chrome already has this. |
+| Canvas fingerprint | Can't be spoofed reliably without introducing detectable noise. |
+
+## Headful vs Headless
+
+<Card title="WAF-protected sites require headful mode">
+
+Headless Chrome has fundamental differences that sophisticated WAFs detect regardless of JS patches:
+
+- Different rendering pipeline (no compositing)
+- Missing screen/display properties
+- HTTP/2 TLS fingerprint differences
+
+For Akamai, Cloudflare, and similar WAFs, use headful mode via [Docker & VNC](/voidcrawl/guides/docker/).
+
+</Card>
+
+```python
+from void_crawl import BrowserConfig, BrowserPool, PoolConfig
+
+# For WAF-protected sites -- use headful
+config = PoolConfig(
+    browser=BrowserConfig(headless=False),
+)
+async with BrowserPool(config) as pool:
+    async with pool.acquire() as tab:
+        await tab.navigate("https://waf-protected-site.com")
+        await tab.wait_for_stable_dom(timeout=15.0)
+        html = await tab.content()
+```
+
+## DOM Stability Waiting
+
+JS-heavy sites and WAF challenge pages don't have their content ready at page load. Instead of a blind `sleep()`, use `wait_for_stable_dom()`:
+
+```python
+async with pool.acquire() as tab:
+    await tab.navigate(url)
+
+    stabilised = await tab.wait_for_stable_dom(
+        timeout=15.0,      # max seconds to wait
+        min_length=5000,   # min chars before page is "real"
+        stable_checks=5,   # consecutive stable polls required
+    )
+
+    if not stabilised:
+        print("Page didn't fully render")
+```
+
+This polls `document.body.innerHTML.length` every 300ms and considers the page ready when the size stabilizes above the minimum threshold. It prevents redirect gates, loading spinners, and challenge pages from being mistaken for real content.
+
+## Disabling Stealth
+
+```python
+from void_crawl import BrowserConfig, BrowserSession
+
+async with BrowserSession(BrowserConfig(stealth=False)) as session:
+    page = await session.new_page("https://trusted-site.com")
+```
+
+Stealth is always on for `BrowserPool`. The minimal patches have negligible overhead.
+
+## Real-World Results
+
+Tested against Akamai WAF (BusinessWire) -- the same site that blocks Playwright, Selenium, and chromiumoxide with heavy stealth patches:
+
+| Approach | Result |
+|----------|--------|
+| chromiumoxide defaults (`--enable-automation`) | 403 Access Denied |
+| chromiumoxide + heavy JS spoofing + fake UA | 403 Access Denied |
+| chromiumoxide + clean flags + no UA override | **Success (600K chars)** |
+| zendriver (reference) | Success |
+| Plain curl | 403 Access Denied |
+
+**The lesson: the flags matter more than the JS patches.**
+
+## FAQs
+
+<details>
+<summary>Will stealth mode bypass all bot detection?</summary>
+
+No. VoidCrawl's stealth handles most common WAFs (Akamai, Cloudflare basic). Advanced protections that analyze traffic patterns, require CAPTCHAs, or use device attestation are outside the current scope.
+
+</details>
+
+<details>
+<summary>Does stealth add latency?</summary>
+
+Negligible. The JS patches are injected once per tab creation via `addScriptToEvaluateOnNewDocument` and execute before any page script. The flag changes are applied at Chrome launch time with zero runtime cost.
+
+</details>
+
+<details>
+<summary>Why not use a custom user-agent?</summary>
+
+A custom UA that doesn't match the actual Chrome version is an instant detection signal. VoidCrawl uses Chrome's real user-agent, which is always consistent with the actual browser binary.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **zendriver**. cdpdriver. *Async Chrome automation with stealth, successor to undetected-chromedriver.* https://github.com/cdpdriver/zendriver
+
+<a id="ref-2"></a>○ **nodriver**. ultrafunkamsterdam. *Predecessor to zendriver.* https://github.com/ultrafunkamsterdam/nodriver
+
+<a id="ref-3"></a>◑ **undetected-chromedriver**. ultrafunkamsterdam. *Patched ChromeDriver to bypass bot detection.* https://github.com/ultrafunkamsterdam/undetected-chromedriver

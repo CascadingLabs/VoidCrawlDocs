@@ -1,0 +1,51 @@
+---
+title: "Example: Multi-Page"
+description: Work with multiple pages (tabs) in a single browser session.
+---
+
+Open multiple tabs in one browser session and work with them independently.
+
+## Code
+
+```python
+import asyncio
+
+from void_crawl import BrowserConfig, BrowserSession
+
+URLS = [
+    "https://example.com",
+    "https://httpbin.org/html",
+    "https://www.iana.org/domains/reserved",
+]
+
+
+async def main() -> None:
+    async with BrowserSession(BrowserConfig()) as browser:
+        pages = [await browser.new_page(url) for url in URLS]
+        for page in pages:
+            title = await page.title()
+            url = await page.url()
+            print(f"  {url}  ->  {title}")
+        for page in pages:
+            await page.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Key Points
+
+- `BrowserSession` gives you low-level control over individual tabs. Use it when you need to manage pages independently rather than through a pool.
+- Each `new_page(url)` opens a new tab and navigates to the URL.
+- Pages are independent -- navigating one doesn't affect the others.
+- Always `close()` pages when done to free browser resources.
+- For concurrent scraping with automatic tab management, use `BrowserPool` instead. See the [Browser Pool guide](/voidcrawl/guides/browser-pool/).
+
+## Expected Output
+
+```
+  https://example.com/  ->  Example Domain
+  https://httpbin.org/html  ->  Herman Melville - Moby Dick
+  https://www.iana.org/domains/reserved  ->  IANA — Domain Name Services — Reserved Domains
+```

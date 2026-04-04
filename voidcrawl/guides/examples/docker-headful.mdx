@@ -1,0 +1,102 @@
+---
+title: "Example: Docker Headful"
+description: Connect to Chrome running headful inside Docker with GPU acceleration and VNC.
+---
+
+Connect VoidCrawl to Chrome instances running in the Docker headful container (Sway + wayvnc + GPU). Watch everything Chrome does via VNC.
+
+## Setup
+
+Start the headful Docker container first:
+
+```bash
+./docker/run-headful.sh          # auto-detects your GPU
+# or: ./docker/run-headful.sh --gpu amd
+```
+
+Then run the script. Open `http://localhost:6080` in your browser and click **Connect** to watch Chrome in real time.
+
+## Code
+
+```python
+import asyncio
+
+from void_crawl import BrowserConfig, BrowserPool, PoolConfig
+
+
+async def main() -> None:
+    config = PoolConfig(
+        chrome_ws_urls=[
+            "http://localhost:19222",
+            "http://localhost:19223",
+        ],
+        tabs_per_browser=2,
+        browser=BrowserConfig(headless=False),
+    )
+
+    async with BrowserPool(config) as pool:
+        # -- Basic navigation --
+        async with pool.acquire() as tab:
+            event = await tab.goto(
+                "https://en.wikipedia.org/wiki/Web_scraping",
+                timeout=30.0,
+            )
+            print(f"Wait event: {event}")
+
+            title = await tab.title()
+            html = await tab.content()
+            print(f"Title: {title}")
+            print(f"HTML: {len(html):,} chars")
+
+            # DOM queries
+            headings = await tab.query_selector_all("#toc li a")
+            print(f"Table of contents entries: {len(headings)}")
+            for h in headings[:5]:
+                print(f"  - {h}")
+
+            # Screenshot
+            png_bytes = await tab.screenshot_png()
+            print(f"Screenshot: {len(png_bytes):,} bytes")
+
+            # JavaScript evaluation
+            link_count = await tab.evaluate_js(
+                'document.querySelectorAll("a").length'
+            )
+            print(f"Links on page: {link_count}")
+
+        # -- Parallel fetch (watch both tabs in VNC!) --
+        print("\nParallel fetch...")
+
+        async def fetch(url: str) -> tuple[str, int]:
+            async with pool.acquire() as tab:
+                await tab.goto(url)
+                t = await tab.title()
+                length = len(await tab.content())
+                return t or "(no title)", length
+
+        results = await asyncio.gather(
+            fetch("https://en.wikipedia.org/wiki/Web_scraping"),
+            fetch(
+                "https://en.wikipedia.org/"
+                "wiki/Rust_(programming_language)"
+            ),
+        )
+        for t, length in results:
+            print(f"  {t}: {length:,} chars")
+
+    print("\nDone! The Docker container is still running.")
+    print("Connect VNC to localhost:5900 to see the Chrome windows.")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Key Points
+
+- `chrome_ws_urls` tells the pool to connect to existing Chrome instances instead of launching new ones.
+- `headless=False` in `BrowserConfig` is required when connecting to headful Chrome.
+- `goto()` combines `navigate()` + `wait_for_network_idle()` in one call. The return value indicates what event was received.
+- The parallel fetch demonstrates two tabs working simultaneously -- visible in VNC as two windows navigating at once.
+
+See the [Docker & VNC guide](/voidcrawl/guides/docker/) for the full setup.

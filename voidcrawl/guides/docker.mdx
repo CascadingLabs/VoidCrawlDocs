@@ -1,0 +1,205 @@
+---
+title: Docker & VNC
+description: Run Chrome headless or headful inside Docker with GPU passthrough and VNC viewing.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+VoidCrawl supports two Docker modes: **headless** (production, any platform) and **headful** (GPU-accelerated with VNC, Linux only).
+
+## Headless Docker (production)
+
+Chrome runs as a persistent daemon with CDP exposed on standard ports.
+
+```bash
+cd docker
+docker compose up -d
+```
+
+Connect VoidCrawl to the containerized Chrome:
+
+```python
+import asyncio
+from void_crawl import BrowserPool, PoolConfig
+
+async def main():
+    config = PoolConfig(
+        chrome_ws_urls=["http://localhost:9222", "http://localhost:9223"],
+        tabs_per_browser=4,
+    )
+    async with BrowserPool(config) as pool:
+        async with pool.acquire() as tab:
+            await tab.navigate("https://example.com")
+            print(await tab.title())
+
+asyncio.run(main())
+```
+
+Or via environment variable:
+
+```bash
+export CHROME_WS_URLS="http://localhost:9222,http://localhost:9223"
+python your_script.py
+```
+
+## Headful Docker (GPU + VNC)
+
+Run Chrome with a real GUI inside Docker -- GPU-accelerated, isolated from your desktop, viewable via VNC.
+
+### What's happening under the hood
+
+```
++------------------ Docker container -------------------+
+|                                                        |
+|  Sway (Wayland compositor)                             |
+|    Creates a virtual screen in GPU memory.             |
+|    Chrome draws its windows here.                      |
+|    Runs with WLR_BACKENDS=headless.                    |
+|                                                        |
+|  Chrome (headful, GPU-accelerated)                     |
+|    Renders pages into Sway's virtual screen using      |
+|    --ozone-platform=wayland. Uses your GPU via         |
+|    /dev/dri passthrough for hardware rendering.        |
+|    Exposes CDP on ports 19222 and 19223.               |
+|                                                        |
+|  wayvnc (VNC server)                                   |
+|    Reads pixels from Sway's virtual screen and         |
+|    streams them to any VNC client on port 5900.        |
+|    Uses --gpu for hardware H.264 encoding.             |
+|                                                        |
++--------------------------------------------------------+
+         |                              |
+         | /dev/dri (GPU passthrough)   | port 5900 (VNC)
+         | port 19222, 19223 (CDP)      |
+```
+
+### Quick start
+
+```bash
+# Auto-detects your GPU (AMD/Intel/NVIDIA) and starts everything
+./docker/run-headful.sh
+
+# Or specify GPU manually
+./docker/run-headful.sh --gpu amd
+./docker/run-headful.sh --gpu nvidia
+./docker/run-headful.sh --gpu intel
+./docker/run-headful.sh --gpu cpu        # no GPU, software rendering
+```
+
+### Connecting
+
+| Port | What | How to use |
+|------|------|------------|
+| `localhost:6080` | **noVNC (browser)** | Open in any browser to watch Chrome |
+| `localhost:5900` | VNC (native) | Use a VNC client (Remmina, TigerVNC) |
+| `localhost:19222` | CDP | VoidCrawl connects here (browser 1) |
+| `localhost:19223` | CDP | VoidCrawl connects here (browser 2) |
+
+### Connecting VoidCrawl to Docker Chrome
+
+```python
+import asyncio
+from void_crawl import BrowserConfig, BrowserPool, PoolConfig
+
+async def main():
+    config = PoolConfig(
+        chrome_ws_urls=["http://localhost:19222", "http://localhost:19223"],
+        tabs_per_browser=2,
+        browser=BrowserConfig(headless=False),
+    )
+
+    async with BrowserPool(config) as pool:
+        async with pool.acquire() as tab:
+            # Watch this in VNC!
+            await tab.goto("https://en.wikipedia.org/wiki/Web_scraping")
+            print(f"Title: {await tab.title()}")
+
+asyncio.run(main())
+```
+
+### Viewing Chrome
+
+<Tabs>
+	<TabItem label="Browser (noVNC)">
+		Open `http://localhost:6080` and click **Connect**. No software needed.
+	</TabItem>
+	<TabItem label="Native VNC">
+		```bash
+		# TigerVNC
+		vncviewer localhost:5900
+
+		# Or Remmina: New connection -> Protocol: VNC -> Server: localhost:5900
+		```
+
+		> VNC uses a binary protocol (RFB), not HTTP. Don't open `localhost:5900` in a browser -- use noVNC on port 6080 instead.
+	</TabItem>
+</Tabs>
+
+### Custom resolution
+
+```bash
+VNC_WIDTH=2560 VNC_HEIGHT=1440 ./docker/run-headful.sh   # 2K
+VNC_WIDTH=1280 VNC_HEIGHT=720 ./docker/run-headful.sh    # 720p (lower memory)
+```
+
+### GPU support
+
+| GPU | Driver | Container setup | Notes |
+|-----|--------|----------------|-------|
+| AMD iGPU | amdgpu | `/dev/dri` passthrough | Works out of the box. Uses Mesa RADV. |
+| AMD discrete | amdgpu | `/dev/dri` passthrough | Same as iGPU. |
+| Intel iGPU | i915/xe | `/dev/dri` passthrough | Works out of the box. Uses Mesa ANV. |
+| NVIDIA | nvidia | `/dev/dri` + `--gpus all` | Needs `nvidia-container-toolkit` + `nvidia-drm.modeset=1`. |
+| None | -- | No device passthrough | Falls back to `pixman` (CPU). Slower but works everywhere. |
+
+### Platform support
+
+| Platform | Headful GPU | Headless Docker |
+|----------|------------|----------------|
+| **Linux** | Yes | Yes |
+| **macOS** | No | Yes (Docker Desktop VM) |
+| **Windows** | No | Yes (Docker Desktop VM) |
+| **WSL2** | Partial | Yes |
+
+The headful GPU container is a **Linux-only** feature. It relies on `/dev/dri` device passthrough, Sway/wlroots, and `network_mode: host`.
+
+### Stopping
+
+```bash
+# Foreground: Ctrl+C
+# Detached:
+docker compose -f docker/docker-compose.headful.yml --profile amd down
+```
+
+## Why headful?
+
+For WAF-protected sites (Akamai, Cloudflare), headful mode is required. Headless Chrome has fundamental differences that sophisticated WAFs detect:
+
+- Different rendering pipeline (no compositing)
+- Missing screen/display properties
+- HTTP/2 TLS fingerprint differences
+
+Running headful inside Docker gives you the stealth benefits of a real Chrome GUI without it stealing focus on your desktop. See [Stealth Mode](/voidcrawl/guides/stealth/) for details.
+
+## FAQs
+
+<details>
+<summary>Why not just run Chrome headful natively?</summary>
+
+Chrome headful on your desktop steals focus, pops up windows, and interferes with your work. Docker isolates everything -- Chrome runs in its own display server. You can watch via VNC or ignore it entirely. Same container works in CI/CD and on remote servers.
+
+</details>
+
+<details>
+<summary>VNC shows a black screen</summary>
+
+Sway might not have started yet. Wait a few seconds -- wayvnc auto-reconnects. Check `docker logs <container>` if it persists.
+
+</details>
+
+<details>
+<summary>High memory usage with headful Chrome</summary>
+
+Each headful Chrome instance uses ~300-500 MB more than headless because it maintains a real render tree + GPU buffers. This is expected. Reduce tab count or use the headless Docker setup if memory is constrained.
+
+</details>

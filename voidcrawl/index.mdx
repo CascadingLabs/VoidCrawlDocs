@@ -1,0 +1,105 @@
+---
+title: VoidCrawl
+description: Rust-native CDP browser automation for Python via PyO3.
+---
+
+import JsonLd from '../../../src/components/JsonLd.astro';
+import VoidCrawlArchChart from '../../../src/components/VoidCrawlArchChart.tsx';
+
+<JsonLd schema={{
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	name: "VoidCrawl",
+	applicationCategory: "DeveloperApplication",
+	operatingSystem: "Cross-platform",
+	description: "Rust-native CDP browser automation for Python. A Chrome DevTools Protocol client exposed via PyO3, replacing Playwright/Selenium with a permissively-licensed stack.",
+	url: "https://cascadinglabs.com/voidcrawl/",
+	offers: {
+		"@type": "Offer",
+		price: "0",
+		priceCurrency: "USD",
+	},
+	author: {
+		"@type": "Organization",
+		name: "Cascading Labs",
+		url: "https://cascadinglabs.com",
+	},
+}} />
+
+> **VoidCrawl is currently in Alpha.** The API is expected to change significantly. We do not expect a stable API until we are out of Beta.
+
+**VoidCrawl** is a Rust-native Chrome DevTools Protocol<sup>[△](#ref-1)</sup> (CDP) client exposed to Python via PyO3<sup>[○](#ref-2)</sup>. It replaces Playwright<sup>[◑](#ref-3)</sup> and Selenium<sup>[◇](#ref-4)</sup> with a permissively-licensed (Apache-2.0) stack for rendering JavaScript-heavy pages, controlling browsers, and automating web interactions.
+
+Built on [chromiumoxide](https://github.com/mattsse/chromiumoxide) with a shared Tokio<sup>[★](#ref-5)</sup> runtime, VoidCrawl gives you async-first browser automation with near-zero overhead tab reuse.
+
+<VoidCrawlArchChart client:visible />
+
+> **Used by [Yosoi](/yosoi/)** -- an AI-powered selector discovery tool for resilient web scraping.
+
+## Why VoidCrawl?
+
+- **Rust performance, Python ergonomics.** The core is written in Rust. Every method is async. Python just awaits the results.
+- **Tab pooling.** `BrowserPool` pre-opens tabs and recycles them instead of closing and reopening. After the first warmup, acquiring a tab is near-instant.
+- **Stealth by default.** Anti-detection patches are applied automatically. No fake fingerprints -- just clean Chrome flags that don't advertise automation.
+- **No AGPL exposure.** Every dependency is MIT or Apache-2.0 licensed.
+- **Composable actions.** A two-tier action framework (JS and CDP) lets you build reusable browser interaction sequences.
+
+## Quick Example
+
+```python
+import asyncio
+from void_crawl import BrowserPool, PoolConfig
+
+async def main():
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            await tab.navigate("https://example.com")
+            print(await tab.title())
+            print(len(await tab.content()))
+
+asyncio.run(main())
+```
+
+## FAQs
+
+<details>
+<summary>How is VoidCrawl different from Playwright?</summary>
+
+Playwright bundles its own browser binaries and exposes a high-level API. VoidCrawl connects to your existing Chrome/Chromium installation via CDP, keeps the browser alive as a daemon, and recycles tabs instead of opening new ones. The Rust core makes CDP calls directly with no intermediate process.
+
+</details>
+
+<details>
+<summary>Do I need Rust installed to use VoidCrawl?</summary>
+
+Not if you install from PyPI (`uv add void-crawl`). Pre-built wheels are available. You only need Rust if you want to build from source or contribute to the core.
+
+</details>
+
+<details>
+<summary>Does VoidCrawl work with Firefox or Safari?</summary>
+
+No. VoidCrawl uses the Chrome DevTools Protocol, which is specific to Chromium-based browsers. Firefox has partial CDP support but it is not tested or supported.
+
+</details>
+
+<details>
+<summary>What Python versions are supported?</summary>
+
+Python 3.10 and above. Earlier versions are not supported due to use of modern type hint syntax and asyncio features.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **Chrome DevTools Protocol (CDP)**. Google. *Protocol for instrumenting, inspecting, and debugging Chromium-based browsers.* https://chromedevtools.github.io/devtools-protocol/
+
+<a id="ref-2"></a>○ **PyO3**. PyO3 Contributors. *Rust bindings for the Python interpreter.* https://pyo3.rs/
+
+<a id="ref-3"></a>◑ **Playwright**. Microsoft. *Browser automation library for Node.js, Python, Java, and .NET.* https://playwright.dev/python/
+
+<a id="ref-4"></a>◇ **Selenium**. Selenium Contributors. *Browser automation framework.* https://www.selenium.dev/
+
+<a id="ref-5"></a>★ **Tokio**. Tokio Contributors. *Asynchronous runtime for Rust.* https://tokio.rs/
+
+<a id="ref-6"></a>⬡ **Pydantic**. Pydantic Services Inc. *Data validation library for Python.* https://docs.pydantic.dev/

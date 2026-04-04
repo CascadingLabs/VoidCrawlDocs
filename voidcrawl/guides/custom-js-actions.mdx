@@ -1,0 +1,203 @@
+---
+title: Custom JS Actions
+description: Build reusable browser actions with JsActionNode, inline_js, and Flow composition.
+---
+
+VoidCrawl's actions framework lets you create reusable browser interaction sequences. Custom actions are classes that execute JavaScript inside the page or call CDP methods directly.
+
+## Creating a JS Action
+
+Subclass `JsActionNode` and assign a `js` class variable with your JavaScript code. Use `inline_js()` for inline scripts or `load_js()` for external files.
+
+```python
+from void_crawl.actions import JsActionNode, inline_js
+
+class AppendToOutput(JsActionNode):
+    """Append text to an element."""
+
+    js = inline_js("""\
+const el = document.querySelector(__params.selector);
+el.innerHTML += '<p>' + __params.text + '</p>';
+return el.children.length;
+""")
+
+    def __init__(self, text: str, selector: str = "#output") -> None:
+        self.text = text
+        self.selector = selector
+```
+
+**How it works:**
+
+- Instance attributes (`self.text`, `self.selector`) are automatically serialized and injected as `__params` in the JS context.
+- The JS code can read `__params.text`, `__params.selector`, etc.
+- The return value of the JS is returned to Python as a native type (str, int, dict, list, etc.).
+
+### Using your custom action
+
+```python
+async with pool.acquire() as tab:
+    await tab.navigate("https://example.com")
+    count = await AppendToOutput("Hello!").run(tab)
+    print(f"Children after append: {count}")
+```
+
+## Creating a CDP Action
+
+For low-level Chrome protocol calls, subclass `ActionNode` and implement the `run` method:
+
+```python
+from void_crawl.actions import ActionNode, Tab
+
+class CdpDoubleClick(ActionNode):
+    """Double-click at coordinates via CDP."""
+
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+
+    async def run(self, tab: Tab) -> None:
+        for _ in range(2):
+            await tab.dispatch_mouse_event(
+                "mousePressed", self.x, self.y, click_count=2
+            )
+            await tab.dispatch_mouse_event(
+                "mouseReleased", self.x, self.y, click_count=2
+            )
+```
+
+## Loading JS from Files
+
+For larger scripts, use `load_js()` to load from a file:
+
+```python
+from void_crawl.actions import JsActionNode, load_js
+
+class ExtractProducts(JsActionNode):
+    js = load_js("scripts/extract_products.js")
+```
+
+The file path is relative to the Python file containing the class.
+
+## Flows
+
+A `Flow` composes multiple actions into a sequence:
+
+```python
+from void_crawl.actions import (
+    Flow, ScrollTo, SetInputValue, ClickElement, GetText
+)
+
+flow = Flow([
+    ScrollTo(0, 0),
+    SetInputValue("#search", "void crawl"),
+    ClickElement("#submit"),
+    GetText("#results"),
+])
+
+result = await flow.run(tab)
+```
+
+### FlowResult
+
+`Flow.run()` returns a `FlowResult` with:
+
+- `result.results` -- list of all action return values
+- `result.last` -- the return value of the last action
+
+```python
+result = await flow.run(tab)
+print(result.results)  # [None, None, None, "Search results..."]
+print(result.last)     # "Search results..."
+```
+
+## Complete Example
+
+Here's a full example combining built-in and custom actions:
+
+```python
+import asyncio
+
+from void_crawl import BrowserConfig, BrowserSession
+from void_crawl.actions import (
+    ClickElement,
+    Flow,
+    GetText,
+    JsActionNode,
+    ScrollTo,
+    SetInputValue,
+    inline_js,
+)
+
+
+class AppendToOutput(JsActionNode):
+    """Custom action: append text to an element."""
+
+    js = inline_js("""\
+const el = document.querySelector(__params.selector);
+el.innerHTML += '<p>' + __params.text + '</p>';
+return el.children.length;
+""")
+
+    def __init__(self, text: str, selector: str = "#output") -> None:
+        self.text = text
+        self.selector = selector
+
+
+async def main():
+    async with BrowserSession(BrowserConfig()) as browser:
+        page = await browser.new_page("data:text/html,<html><body>"
+            "<h1 id='title'>Hello</h1>"
+            "<input id='name' />"
+            "<button id='greet' onclick=\""
+            "document.getElementById('title').textContent="
+            "'Hello, '+document.getElementById('name').value+'!'"
+            "\">Greet</button>"
+            "<div id='output'></div>"
+            "</body></html>")
+
+        # Individual actions
+        await SetInputValue("#name", "World").run(page)
+        await ClickElement("#greet").run(page)
+        title = await GetText("#title").run(page)
+        print(f"Title: {title}")  # "Hello, World!"
+
+        # Custom JS action
+        count = await AppendToOutput("Added via action").run(page)
+        print(f"Output children: {count}")
+
+        # Composed flow
+        flow = Flow([
+            ScrollTo(0, 0),
+            AppendToOutput("Added via flow"),
+            GetText("#output"),
+        ])
+        result = await flow.run(page)
+        print(f"Output text: {result.last}")
+
+        await page.close()
+
+asyncio.run(main())
+```
+
+## FAQs
+
+<details>
+<summary>When should I use custom actions vs. evaluate_js?</summary>
+
+Use `evaluate_js()` for one-off JS expressions. Use custom actions when you want to parameterize, reuse, or compose JS logic across different pages or scripts. Actions are also easier to test in isolation.
+
+</details>
+
+<details>
+<summary>Can I mix JS and CDP actions in a Flow?</summary>
+
+Yes. A `Flow` accepts any `ActionNode` subclass. You can mix `JsActionNode` (JS-tier) and `ActionNode` (CDP-tier) freely.
+
+</details>
+
+<details>
+<summary>How are parameters passed to JS?</summary>
+
+All instance attributes of your `JsActionNode` subclass are serialized to JSON and injected as `__params` in the JS execution context. Supported types: str, int, float, bool, list, dict, None.
+
+</details>

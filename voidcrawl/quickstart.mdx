@@ -1,0 +1,134 @@
+---
+title: Quick Start
+description: Install VoidCrawl and automate a browser in minutes.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Install
+
+```bash
+uv add void-crawl
+```
+
+Make sure Chrome or Chromium is installed on your system.
+
+## Option 1: BrowserPool (recommended)
+
+The pool pre-opens tabs and recycles them, giving near-instant page loads after the first warmup:
+
+```python
+import asyncio
+from void_crawl import BrowserPool, PoolConfig
+
+async def main():
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            await tab.navigate("https://example.com")
+            print(await tab.title())   # "Example Domain"
+            print(len(await tab.content()))
+
+asyncio.run(main())
+```
+
+**Key points:**
+
+- `PoolConfig()` uses sensible defaults (1 browser, 4 tabs). Configure via constructor args or env vars.
+- `pool.acquire()` returns a `PooledTab` -- use it like a `Page`. The context manager auto-releases it back to the pool.
+- Tabs are recycled (navigated to `about:blank`) rather than closed, making subsequent acquires near-instant.
+
+## Option 2: BrowserSession (low-level)
+
+For direct browser control without pooling:
+
+```python
+import asyncio
+from void_crawl import BrowserConfig, BrowserSession
+
+async def main():
+    async with BrowserSession(BrowserConfig()) as session:
+        page = await session.new_page("https://example.com")
+        print(await page.title())   # "Example Domain"
+        print(len(await page.content()))
+        await page.close()
+
+asyncio.run(main())
+```
+
+## Option 3: Docker
+
+For production, Chrome runs as a persistent daemon in Docker with pre-warmed profiles:
+
+```bash
+cd docker
+docker compose up -d
+```
+
+The pool connects to Chrome via `CHROME_WS_URLS` instead of launching it:
+
+```bash
+export CHROME_WS_URLS="http://localhost:9222,http://localhost:9223"
+python your_script.py
+```
+
+See [Docker & VNC](/voidcrawl/guides/docker/) for the full guide.
+
+## Try it with QScrape
+
+[QScrape](https://qscrape.dev) provides purpose-built fictional websites for testing scrapers. Try VoidCrawl against a QScrape target:
+
+```python
+import asyncio
+from void_crawl import BrowserPool, PoolConfig
+
+async def main():
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            await tab.navigate(
+                "https://qscrape.dev/l1/eshop/catalog/"
+                "?cat=Forge%20%26%20Smithing"
+            )
+
+            title = await tab.title()
+            print(f"Page: {title}")
+
+            # Query product names from the DOM
+            products = await tab.query_selector_all(".product-name")
+            for p in products[:5]:
+                print(f"  - {p}")
+
+asyncio.run(main())
+```
+
+## What Just Happened?
+
+<Steps>
+1. VoidCrawl launched a headless Chrome instance (or connected to an existing one via Docker)
+
+2. A tab was acquired from the pool and navigated to the target URL
+
+3. The page rendered with full JavaScript execution -- VoidCrawl sees the live DOM, not raw HTML
+
+4. DOM queries extracted content using CSS selectors, just like `document.querySelectorAll` in a browser console
+
+5. The tab was released back to the pool for reuse (not closed)
+
+</Steps>
+
+## Important Concepts
+
+- Every method on `Page`, `PooledTab`, and `BrowserSession` is **async** -- always `await` them.
+- Both `BrowserPool` and `BrowserSession` are async context managers that ensure clean shutdown.
+- Stealth mode is **on by default**. Pass `stealth=False` to `BrowserConfig` to disable it.
+
+## Next Steps
+
+- [Browser Pool](/voidcrawl/guides/browser-pool/) -- understand cold start vs tab reuse
+- [Built-in Actions](/voidcrawl/guides/builtin-actions/) -- click, type, scroll, and query the DOM
+- [Stealth Mode](/voidcrawl/guides/stealth/) -- how anti-detection works
+- [Docker & VNC](/voidcrawl/guides/docker/) -- run Chrome in Docker for production
+- [Examples](/voidcrawl/guides/examples/) -- runnable scripts for common tasks
+
+## References
+
+<a id="ref-1"></a>△ **QScrape**. Cascading Labs. *Purpose-built fictional scraping targets for benchmarking and testing.* https://qscrape.dev

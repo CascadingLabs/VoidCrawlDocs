@@ -1,0 +1,46 @@
+---
+title: "Example: Basic Navigation"
+description: Launch a headless browser, visit a page, and read its content.
+---
+
+The simplest VoidCrawl use case: open a browser, navigate to a URL, and read the page.
+
+## Code
+
+```python
+import asyncio
+
+from void_crawl import BrowserPool, PoolConfig
+
+
+async def main() -> None:
+    async with BrowserPool(PoolConfig()) as pool, pool.acquire() as tab:
+        await tab.navigate("https://example.com")
+        title = await tab.title()
+        url = await tab.url()
+        html = await tab.content()
+
+        print(f"Title: {title}")
+        print(f"URL:   {url}")
+        print(f"HTML length: {len(html)} chars")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## What's Happening
+
+1. `BrowserPool(PoolConfig())` creates a pool with default settings (1 browser, 4 tabs).
+2. `pool.acquire()` checks out a tab from the pool.
+3. `tab.navigate()` sends the browser to the URL.
+4. `tab.title()`, `tab.url()`, and `tab.content()` read page state from the live DOM.
+5. When the `async with` block exits, the tab is released back to the pool for reuse.
+
+## Expected Output
+
+```
+Title: Example Domain
+URL:   https://example.com/
+HTML length: 1256 chars
+```

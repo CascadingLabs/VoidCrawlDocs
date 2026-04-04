@@ -1,0 +1,180 @@
+---
+title: Built-in Actions
+description: DOM and CDP-level actions for clicking, typing, scrolling, and querying the page.
+---
+
+VoidCrawl provides two tiers of browser actions:
+
+- **JS-tier** -- actions evaluated as JavaScript inside the page (DOM manipulation, reading attributes, scrolling)
+- **CDP-tier** -- actions that call Chrome DevTools Protocol input methods directly (mouse events, keyboard events)
+
+Both tiers can be used standalone or composed into [Flows](/voidcrawl/guides/custom-js-actions/#flows).
+
+## Using Actions
+
+Actions are classes you instantiate and `run()` against a tab or page:
+
+```python
+from void_crawl.actions import ClickElement, GetText, SetInputValue
+
+async with pool.acquire() as tab:
+    await tab.navigate("https://example.com")
+
+    # Each action is instantiated with parameters, then run against a tab
+    await SetInputValue("#search", "hello").run(tab)
+    await ClickElement("#submit").run(tab)
+    title = await GetText("h1").run(tab)
+```
+
+## JS-Tier Actions (DOM)
+
+These actions execute JavaScript inside the page context. They work with CSS selectors and return Python-native values.
+
+### Click
+
+| Action | Parameters | Returns | Description |
+|--------|-----------|---------|-------------|
+| `ClickElement` | `selector: str` | `None` | Click the first element matching the CSS selector |
+| `ClickAt` | `x: int, y: int` | `None` | Click at specific page coordinates (via JS) |
+
+```python
+from void_crawl.actions import ClickElement, ClickAt
+
+await ClickElement("#submit-btn").run(tab)
+await ClickAt(100, 200).run(tab)
+```
+
+### Input
+
+| Action | Parameters | Returns | Description |
+|--------|-----------|---------|-------------|
+| `SetInputValue` | `selector: str, value: str` | `None` | Set the value of an input element |
+| `ClearInput` | `selector: str` | `None` | Clear an input element |
+| `SelectOption` | `selector: str, value: str` | `None` | Select an option in a `<select>` element |
+
+```python
+from void_crawl.actions import SetInputValue, ClearInput, SelectOption
+
+await SetInputValue("#name", "World").run(tab)
+await ClearInput("#name").run(tab)
+await SelectOption("#country", "US").run(tab)
+```
+
+### DOM Queries
+
+| Action | Parameters | Returns | Description |
+|--------|-----------|---------|-------------|
+| `GetText` | `selector: str` | `str` | Get the text content of an element |
+| `GetAttribute` | `selector: str, attr: str` | `str \| None` | Get an attribute value |
+| `SetAttribute` | `selector: str, attr: str, value: str` | `None` | Set an attribute value |
+
+```python
+from void_crawl.actions import GetText, GetAttribute
+
+title = await GetText("h1").run(tab)
+href = await GetAttribute("a.logo", "href").run(tab)
+```
+
+### Scroll
+
+| Action | Parameters | Returns | Description |
+|--------|-----------|---------|-------------|
+| `ScrollTo` | `x: int, y: int` | `None` | Scroll to absolute position |
+| `ScrollBy` | `dx: int, dy: int` | `None` | Scroll by relative offset |
+
+```python
+from void_crawl.actions import ScrollTo, ScrollBy
+
+await ScrollTo(0, 0).run(tab)        # scroll to top
+await ScrollBy(0, 500).run(tab)      # scroll down 500px
+```
+
+### Hover
+
+| Action | Parameters | Returns | Description |
+|--------|-----------|---------|-------------|
+| `Hover` | `selector: str` | `None` | Hover over an element (triggers CSS :hover and JS events) |
+
+### Wait
+
+| Action | Parameters | Returns | Description |
+|--------|-----------|---------|-------------|
+| `WaitForSelector` | `selector: str, timeout: float` | `bool` | Wait for an element to appear |
+| `WaitForTimeout` | `ms: float` | `None` | Wait for a fixed duration |
+
+```python
+from void_crawl.actions import WaitForSelector
+
+found = await WaitForSelector("#content", timeout=5.0).run(tab)
+if not found:
+    print("Element did not appear within 5 seconds")
+```
+
+## CDP-Tier Actions
+
+These actions bypass JavaScript entirely and dispatch input events at the Chrome protocol level. Use them when you need low-level control or when JS-tier actions are blocked by the page.
+
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| `CdpClick` | `x: float, y: float` | Mouse click at coordinates |
+| `CdpClickAndHold` | `x: float, y: float, duration: float` | Click and hold |
+| `CdpHover` | `x: float, y: float` | Move mouse to coordinates |
+| `CdpTypeText` | `text: str` | Type text via key events |
+| `CdpScroll` | `x: float, y: float, dx: float, dy: float` | Scroll at position |
+| `CdpScrollUp/Down/Left/Right` | `amount: float` | Directional scroll |
+
+```python
+from void_crawl.actions import CdpClick, CdpTypeText
+
+await CdpClick(100.0, 200.0).run(tab)
+await CdpTypeText("hello world").run(tab)
+```
+
+## When to Use Which Tier
+
+| Scenario | Use |
+|----------|-----|
+| Fill a form, click a button | JS-tier (`SetInputValue`, `ClickElement`) |
+| Read text or attributes from the DOM | JS-tier (`GetText`, `GetAttribute`) |
+| Bypass click interception or overlays | CDP-tier (`CdpClick`) |
+| Simulate realistic mouse movement | CDP-tier (`CdpHover`, `CdpClick`) |
+| Interact with canvas or WebGL | CDP-tier |
+| Page blocks `element.click()` | CDP-tier |
+
+## Direct Page Methods
+
+You don't always need the actions framework. `Page` and `PooledTab` have built-in methods for common operations:
+
+```python
+async with pool.acquire() as tab:
+    await tab.navigate(url)
+
+    # DOM queries
+    html = await tab.query_selector("#main")
+    items = await tab.query_selector_all(".item")
+
+    # Interaction
+    await tab.click_element("#btn")
+    await tab.type_into("#input", "text")
+
+    # JS evaluation
+    result = await tab.evaluate_js("document.title")
+```
+
+The actions framework is most useful when you need to compose multiple steps or create reusable sequences. See [Custom JS Actions](/voidcrawl/guides/custom-js-actions/) for building your own.
+
+## FAQs
+
+<details>
+<summary>What's the difference between ClickElement and CdpClick?</summary>
+
+`ClickElement` finds an element by CSS selector and calls `element.click()` in JavaScript. `CdpClick` dispatches a `mousePressed` + `mouseReleased` event at specific x/y coordinates via the Chrome protocol. The CDP version bypasses JS event listeners and click interception.
+
+</details>
+
+<details>
+<summary>Can I chain multiple actions?</summary>
+
+Yes, use `Flow`. See [Custom JS Actions](/voidcrawl/guides/custom-js-actions/#flows) for details.
+
+</details>

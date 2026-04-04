@@ -1,0 +1,162 @@
+---
+title: Async Native
+description: What async-native means for you, how Tokio and asyncio work together, and common patterns.
+---
+
+Every method in VoidCrawl is `async`. This isn't a convenience wrapper around synchronous code -- the entire stack, from Python down to the Rust CDP client, is built on async I/O.
+
+## What This Means for You
+
+1. **Always `await`.** Every call to `navigate()`, `content()`, `title()`, `evaluate_js()`, etc. returns a coroutine. Forgetting `await` gives you a coroutine object, not the result.
+
+2. **Use `asyncio.run()`.** Your entry point needs an event loop. The simplest way:
+
+   ```python
+   import asyncio
+
+   async def main():
+       # your VoidCrawl code here
+       pass
+
+   asyncio.run(main())
+   ```
+
+3. **Use `async with`.** Both `BrowserPool` and `BrowserSession` are async context managers. They ensure clean shutdown (closing browser processes, releasing tabs) even if your code throws an exception.
+
+## How It Works Under the Hood
+
+```
+Python (asyncio event loop)
+    |
+    | await tab.navigate(url)
+    |
+PyO3 bridge (pyo3-async-runtimes)
+    |
+    | future_into_py() converts Rust Future -> Python awaitable
+    |
+Tokio runtime (shared, auto-started)
+    |
+    | CDP WebSocket I/O
+    |
+Chrome (DevTools Protocol)
+```
+
+- Python's `asyncio.run()` drives the event loop.
+- When you `await` a VoidCrawl method, PyO3 hands the Rust future to a shared Tokio<sup>[△](#ref-1)</sup> runtime that runs underneath.
+- The Tokio runtime is created automatically when the first coroutine enters Rust. You don't need to configure it.
+- While Rust is doing CDP I/O, Python's event loop is free to run other tasks.
+
+## Common Patterns
+
+### Sequential navigation
+
+```python
+async with pool.acquire() as tab:
+    await tab.navigate("https://example.com")
+    title = await tab.title()
+    html = await tab.content()
+```
+
+### Parallel fetching with gather
+
+```python
+async def fetch(pool, url):
+    async with pool.acquire() as tab:
+        await tab.navigate(url)
+        return await tab.content()
+
+results = await asyncio.gather(
+    fetch(pool, "https://example.com"),
+    fetch(pool, "https://httpbin.org/html"),
+)
+```
+
+### Processing a stream of URLs
+
+```python
+import asyncio
+
+async def worker(pool, queue):
+    while True:
+        url = await queue.get()
+        async with pool.acquire() as tab:
+            await tab.navigate(url)
+            html = await tab.content()
+            print(f"{url}: {len(html)} chars")
+        queue.task_done()
+
+async def main():
+    async with BrowserPool(PoolConfig(tabs_per_browser=4)) as pool:
+        queue = asyncio.Queue()
+        for url in urls:
+            queue.put_nowait(url)
+
+        workers = [asyncio.create_task(worker(pool, queue)) for _ in range(4)]
+        await queue.join()
+        for w in workers:
+            w.cancel()
+```
+
+## Common Mistakes
+
+### Forgetting `await`
+
+```python
+# Wrong -- this is a coroutine object, not a string
+title = tab.title()
+
+# Right
+title = await tab.title()
+```
+
+### Using `time.sleep()` instead of `asyncio.sleep()`
+
+```python
+# Wrong -- blocks the entire event loop
+import time
+time.sleep(5)
+
+# Right -- yields control to other tasks
+await asyncio.sleep(5)
+```
+
+### Running VoidCrawl outside an async context
+
+```python
+# Wrong -- no event loop
+from void_crawl import BrowserPool, PoolConfig
+pool = BrowserPool(PoolConfig())
+
+# Right -- use asyncio.run()
+import asyncio
+asyncio.run(main())
+```
+
+## FAQs
+
+<details>
+<summary>Can I use VoidCrawl with other async libraries like trio or anyio?</summary>
+
+VoidCrawl's PyO3 bridge is built on `asyncio` specifically. Trio and anyio are not supported. If you're using anyio, its asyncio backend should work.
+
+</details>
+
+<details>
+<summary>Does the Tokio runtime conflict with other Rust extensions?</summary>
+
+The Tokio runtime is created once per process and shared. If another PyO3 extension also uses `pyo3-async-runtimes`, they share the same runtime. This is by design and should not cause conflicts.
+
+</details>
+
+<details>
+<summary>Is there a synchronous API?</summary>
+
+No. All VoidCrawl methods are async. If you need synchronous access, wrap your code in `asyncio.run()`. There are no plans for a sync wrapper.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **Tokio**. Tokio Contributors. *Asynchronous runtime for Rust.* https://tokio.rs/
+
+<a id="ref-2"></a>○ **asyncio**. Python Software Foundation. *Asynchronous I/O framework in the Python standard library.* https://docs.python.org/3/library/asyncio.html

@@ -1,0 +1,124 @@
+---
+title: "Example: Actions Demo"
+description: Demonstrate built-in actions, custom JS actions, Flows, and CDP-level actions.
+---
+
+A comprehensive example showing all tiers of the actions framework.
+
+## Code
+
+```python
+import asyncio
+
+from void_crawl import BrowserConfig, BrowserSession
+from void_crawl.actions import (
+    ActionNode,
+    CdpClick,
+    ClickElement,
+    Flow,
+    GetText,
+    JsActionNode,
+    ScrollTo,
+    SetInputValue,
+    Tab,
+    inline_js,
+)
+
+DEMO_PAGE = """data:text/html,
+<html>
+<body>
+  <h1 id="title">Actions Demo</h1>
+  <input id="name" type="text" placeholder="Your name" />
+  <button id="greet" onclick="
+    document.getElementById('title').textContent =
+      'Hello, ' + document.getElementById('name').value + '!';
+  ">Greet</button>
+  <div id="output" style="margin-top:20px;"></div>
+</body>
+</html>
+"""
+
+
+# -- Custom JS action --
+
+class AppendToOutput(JsActionNode):
+    """Custom action: append text to the #output div."""
+
+    js = inline_js("""\
+const el = document.querySelector(__params.selector);
+el.innerHTML += '<p>' + __params.text + '</p>';
+return el.children.length;
+""")
+
+    def __init__(self, text: str, selector: str = "#output") -> None:
+        self.text = text
+        self.selector = selector
+
+
+# -- Custom CDP action --
+
+class CdpDoubleClick(ActionNode):
+    """Custom action: double-click at coordinates via CDP."""
+
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+
+    async def run(self, tab: Tab) -> None:
+        for _ in range(2):
+            await tab.dispatch_mouse_event(
+                "mousePressed", self.x, self.y, click_count=2
+            )
+            await tab.dispatch_mouse_event(
+                "mouseReleased", self.x, self.y, click_count=2
+            )
+
+
+async def main() -> None:
+    async with BrowserSession(BrowserConfig()) as browser:
+        page = await browser.new_page(DEMO_PAGE)
+
+        # 1. Individual prebaked actions
+        print("--- Individual actions ---")
+        await SetInputValue("#name", "World").run(page)
+        await ClickElement("#greet").run(page)
+        title = await GetText("#title").run(page)
+        print(f"Title after greet: {title}")
+
+        # 2. Custom JS action
+        print("\n--- Custom JS action ---")
+        count = await AppendToOutput("First line").run(page)
+        print(f"Output children after append: {count}")
+
+        # 3. Composed flow
+        print("\n--- Flow ---")
+        flow = Flow([
+            ScrollTo(0, 0),
+            AppendToOutput("Added via flow"),
+            GetText("#output"),
+        ])
+        result = await flow.run(page)
+        print(f"Flow results: {result.results}")
+        print(f"Last result (output text): {result.last}")
+
+        # 4. CDP-level action
+        print("\n--- CDP click ---")
+        await CdpClick(100.0, 50.0).run(page)
+        print("CDP click dispatched at (100, 50)")
+
+        await page.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## What This Demonstrates
+
+1. **Built-in JS actions** (`SetInputValue`, `ClickElement`, `GetText`) -- the most common operations.
+2. **Custom JS action** (`AppendToOutput`) -- subclass `JsActionNode`, define your JS, and instance attributes become `__params`.
+3. **Flow composition** -- chain multiple actions into a sequence and get all results back.
+4. **CDP-level action** (`CdpClick`) -- bypass JavaScript entirely and dispatch input events at the Chrome protocol level.
+5. **Custom CDP action** (`CdpDoubleClick`) -- subclass `ActionNode` and implement `run()` for low-level protocol access.
+
+See [Built-in Actions](/voidcrawl/guides/builtin-actions/) and [Custom JS Actions](/voidcrawl/guides/custom-js-actions/) for the full reference.

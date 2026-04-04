@@ -1,0 +1,64 @@
+---
+title: "Example: Stealth Mode"
+description: Compare browser fingerprints with stealth enabled vs. disabled.
+---
+
+See what stealth mode changes by comparing fingerprint signals with stealth on and off.
+
+## Code
+
+```python
+import asyncio
+import json
+
+from void_crawl import BrowserConfig, BrowserSession, Page
+
+DETECTION_JS = """
+JSON.stringify({
+    webdriver: navigator.webdriver,
+    plugins_count: navigator.plugins.length,
+    languages: navigator.languages,
+    has_chrome_runtime: typeof window.chrome !== 'undefined'
+        && typeof window.chrome.runtime !== 'undefined',
+})
+"""
+
+
+async def check_fingerprint(label: str, page: Page) -> None:
+    raw = await page.evaluate_js(DETECTION_JS)
+    fingerprint = json.loads(raw)
+    print(f"\n[{label}]")
+    for key, value in fingerprint.items():
+        print(f"  {key}: {value}")
+
+
+async def main() -> None:
+    # Stealth ON (default)
+    async with BrowserSession(BrowserConfig(stealth=True)) as browser:
+        page = await browser.new_page("https://example.com")
+        await check_fingerprint("stealth=True", page)
+        await page.close()
+
+    # Stealth OFF
+    async with BrowserSession(BrowserConfig(stealth=False)) as browser:
+        page = await browser.new_page("https://example.com")
+        await check_fingerprint("stealth=False", page)
+        await page.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## What to Look For
+
+| Signal | Stealth ON | Stealth OFF |
+|--------|-----------|------------|
+| `navigator.webdriver` | `undefined` or `None` | `True` |
+| `plugins_count` | > 0 (real plugins) | > 0 (real plugins) |
+| `languages` | Realistic list | Realistic list |
+| `has_chrome_runtime` | `True` | `True` |
+
+The key difference is `navigator.webdriver`. With stealth on, it's removed from the prototype chain. With stealth off, Chrome sets it to `true`, which is the primary signal WAFs check.
+
+See the [Stealth Mode guide](/voidcrawl/guides/stealth/) for the full explanation of what's patched and why.

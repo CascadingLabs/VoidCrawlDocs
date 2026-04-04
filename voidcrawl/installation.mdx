@@ -1,0 +1,113 @@
+---
+title: Installation
+description: How to install VoidCrawl and set up your environment.
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+VoidCrawl requires Python 3.10+ and Chrome/Chromium installed on your system.
+
+## Install from PyPI
+
+<Tabs syncKey="pkg">
+	<TabItem label="uv">
+		```bash
+		uv add void-crawl
+		```
+	</TabItem>
+	<TabItem label="pip">
+		```bash
+		pip install void-crawl
+		```
+	</TabItem>
+</Tabs>
+
+### Verify the install
+
+```python
+import void_crawl
+print(dir(void_crawl))
+# ['BrowserConfig', 'BrowserPool', 'BrowserSession', 'Page', 'PoolConfig', 'PooledTab']
+```
+
+## Install from Source (Rust dev setup)
+
+Building from source requires a Rust toolchain. This compiles the Rust CDP core and installs the Python extension into your virtualenv.
+
+### Prerequisites
+
+| Requirement | Minimum Version |
+|-------------|----------------|
+| Python | 3.10+ |
+| Rust | 1.86+ |
+| Chrome / Chromium | Any recent version |
+| maturin | 1.7+ |
+| uv | latest |
+
+### Build
+
+<Steps>
+1. Clone the repository
+
+   ```bash
+   git clone https://github.com/CascadingLabs/VoidCrawl
+   ```
+
+2. Navigate into the project directory
+
+   ```bash
+   cd VoidCrawl
+   ```
+
+3. Build and install the extension
+
+   ```bash
+   ./build.sh
+   ```
+
+   This runs `maturin develop --release` which compiles the Rust extension and installs it into the active virtualenv.
+
+4. **Optional:** Install all Python dependency groups (dev, tests, etc.)
+
+   ```bash
+   uv sync --all-groups
+   ```
+
+</Steps>
+
+### Manual build (without build.sh)
+
+```bash
+maturin develop --release --manifest-path crates/pyo3_bindings/Cargo.toml
+```
+
+For CI, `maturin build --release` produces a distributable wheel.
+
+## FAQs
+
+<details>
+<summary>Do I need Rust installed to use VoidCrawl?</summary>
+
+No. Pre-built wheels are published to PyPI for common platforms. You only need Rust if you want to build from source or contribute to the Rust core.
+
+</details>
+
+<details>
+<summary>Which Chrome do I need?</summary>
+
+Any recent version of Chrome or Chromium. VoidCrawl connects via CDP, which is stable across Chrome versions. If `google-chrome --version` or `chromium --version` runs on your system, you are good.
+
+</details>
+
+<details>
+<summary>Can I use a custom Chrome binary?</summary>
+
+Yes. Pass `chrome_executable="/path/to/chrome"` to `BrowserConfig`, or set the binary path in your environment. See the [API Reference](/voidcrawl/reference/api-reference/) for details.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **maturin**. PyO3 Contributors. *Build and publish Rust crates as Python packages.* https://www.maturin.rs/
+
+<a id="ref-2"></a>○ **uv**. Astral. *Python package and project manager.* https://docs.astral.sh/uv/

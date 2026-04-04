@@ -1,0 +1,58 @@
+---
+title: "Example: JavaScript Eval"
+description: Evaluate arbitrary JavaScript in the page context and return native Python types.
+---
+
+Run JavaScript expressions inside the browser and get results back as native Python types.
+
+## Code
+
+```python
+import asyncio
+
+from void_crawl import BrowserPool, PoolConfig
+
+
+async def main() -> None:
+    async with BrowserPool(PoolConfig()) as pool, pool.acquire() as tab:
+        await tab.navigate("https://example.com")
+
+        # evaluate_js returns native Python types
+        user_agent = await tab.evaluate_js("navigator.userAgent")
+        print(f"User agent: {user_agent}")
+
+        # Compute something in-page
+        p_count = await tab.evaluate_js(
+            "document.querySelectorAll('p').length"
+        )
+        print(f"Number of <p> tags: {p_count}")
+
+        # Return structured data
+        dims = await tab.evaluate_js(
+            "({w: window.innerWidth, h: window.innerHeight})"
+        )
+        print(f"Viewport: {dims}")
+
+        # Modify the DOM via JS
+        await tab.evaluate_js("document.title = 'Modified by void_crawl'")
+        print(f"New title: {await tab.title()}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Key Points
+
+- `evaluate_js()` accepts any JavaScript expression and returns the result as a native Python type: `str`, `int`, `float`, `bool`, `dict`, `list`, or `None`.
+- To return an object literal, wrap it in parentheses: `({key: value})`. Without parens, JS interprets `{` as a block statement.
+- You can modify the DOM, read browser APIs, and compute values -- anything you can do in a browser console.
+
+## Expected Output
+
+```
+User agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ...
+Number of <p> tags: 2
+Viewport: {'w': 1920, 'h': 1080}
+New title: Modified by void_crawl
+```
