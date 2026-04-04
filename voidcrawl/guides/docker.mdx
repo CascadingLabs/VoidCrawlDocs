@@ -20,7 +20,7 @@ Connect VoidCrawl to the containerized Chrome:
 
 ```python
 import asyncio
-from void_crawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PoolConfig
 
 async def main():
     config = PoolConfig(
@@ -99,7 +99,7 @@ Run Chrome with a real GUI inside Docker -- GPU-accelerated, isolated from your 
 
 ```python
 import asyncio
-from void_crawl import BrowserConfig, BrowserPool, PoolConfig
+from voidcrawl import BrowserConfig, BrowserPool, PoolConfig
 
 async def main():
     config = PoolConfig(
@@ -111,7 +111,7 @@ async def main():
     async with BrowserPool(config) as pool:
         async with pool.acquire() as tab:
             # Watch this in VNC!
-            await tab.goto("https://en.wikipedia.org/wiki/Web_scraping")
+            await tab.navigate("https://en.wikipedia.org/wiki/Web_scraping")
             print(f"Title: {await tab.title()}")
 
 asyncio.run(main())

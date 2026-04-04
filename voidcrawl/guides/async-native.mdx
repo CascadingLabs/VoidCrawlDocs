@@ -124,7 +124,7 @@ await asyncio.sleep(5)
 
 ```python
 # Wrong -- no event loop
-from void_crawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PoolConfig
 pool = BrowserPool(PoolConfig())
 
 # Right -- use asyncio.run()

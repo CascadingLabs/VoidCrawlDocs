@@ -91,7 +91,7 @@ For Akamai, Cloudflare, and similar WAFs, use headful mode via [Docker & VNC](/v
 </Card>
 
 ```python
-from void_crawl import BrowserConfig, BrowserPool, PoolConfig
+from voidcrawl import BrowserConfig, BrowserPool, PoolConfig
 
 # For WAF-protected sites -- use headful
 config = PoolConfig(
@@ -127,7 +127,7 @@ This polls `document.body.innerHTML.length` every 300ms and considers the page r
 ## Disabling Stealth
 
 ```python
-from void_crawl import BrowserConfig, BrowserSession
+from voidcrawl import BrowserConfig, BrowserSession
 
 async with BrowserSession(BrowserConfig(stealth=False)) as session:
     page = await session.new_page("https://trusted-site.com")

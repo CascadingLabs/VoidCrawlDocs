@@ -10,7 +10,7 @@ VoidCrawl's actions framework lets you create reusable browser interaction seque
 Subclass `JsActionNode` and assign a `js` class variable with your JavaScript code. Use `inline_js()` for inline scripts or `load_js()` for external files.
 
 ```python
-from void_crawl.actions import JsActionNode, inline_js
+from voidcrawl.actions import JsActionNode, inline_js
 
 class AppendToOutput(JsActionNode):
     """Append text to an element."""
@@ -46,7 +46,7 @@ async with pool.acquire() as tab:
 For low-level Chrome protocol calls, subclass `ActionNode` and implement the `run` method:
 
 ```python
-from void_crawl.actions import ActionNode, Tab
+from voidcrawl.actions import ActionNode, Tab
 
 class CdpDoubleClick(ActionNode):
     """Double-click at coordinates via CDP."""
@@ -70,7 +70,7 @@ class CdpDoubleClick(ActionNode):
 For larger scripts, use `load_js()` to load from a file:
 
 ```python
-from void_crawl.actions import JsActionNode, load_js
+from voidcrawl.actions import JsActionNode, load_js
 
 class ExtractProducts(JsActionNode):
     js = load_js("scripts/extract_products.js")
@@ -83,13 +83,13 @@ The file path is relative to the Python file containing the class.
 A `Flow` composes multiple actions into a sequence:
 
 ```python
-from void_crawl.actions import (
+from voidcrawl.actions import (
     Flow, ScrollTo, SetInputValue, ClickElement, GetText
 )
 
 flow = Flow([
     ScrollTo(0, 0),
-    SetInputValue("#search", "void crawl"),
+    SetInputValue("#search", "voidcrawl"),
     ClickElement("#submit"),
     GetText("#results"),
 ])
@@ -117,8 +117,8 @@ Here's a full example combining built-in and custom actions:
 ```python
 import asyncio
 
-from void_crawl import BrowserConfig, BrowserSession
-from void_crawl.actions import (
+from voidcrawl import BrowserConfig, BrowserSession
+from voidcrawl.actions import (
     ClickElement,
     Flow,
     GetText,

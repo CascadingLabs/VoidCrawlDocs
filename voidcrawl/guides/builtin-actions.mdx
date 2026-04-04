@@ -15,7 +15,7 @@ Both tiers can be used standalone or composed into [Flows](/voidcrawl/guides/cus
 Actions are classes you instantiate and `run()` against a tab or page:
 
 ```python
-from void_crawl.actions import ClickElement, GetText, SetInputValue
+from voidcrawl.actions import ClickElement, GetText, SetInputValue
 
 async with pool.acquire() as tab:
     await tab.navigate("https://example.com")
@@ -38,7 +38,7 @@ These actions execute JavaScript inside the page context. They work with CSS sel
 | `ClickAt` | `x: int, y: int` | `None` | Click at specific page coordinates (via JS) |
 
 ```python
-from void_crawl.actions import ClickElement, ClickAt
+from voidcrawl.actions import ClickElement, ClickAt
 
 await ClickElement("#submit-btn").run(tab)
 await ClickAt(100, 200).run(tab)
@@ -53,7 +53,7 @@ await ClickAt(100, 200).run(tab)
 | `SelectOption` | `selector: str, value: str` | `None` | Select an option in a `<select>` element |
 
 ```python
-from void_crawl.actions import SetInputValue, ClearInput, SelectOption
+from voidcrawl.actions import SetInputValue, ClearInput, SelectOption
 
 await SetInputValue("#name", "World").run(tab)
 await ClearInput("#name").run(tab)
@@ -69,7 +69,7 @@ await SelectOption("#country", "US").run(tab)
 | `SetAttribute` | `selector: str, attr: str, value: str` | `None` | Set an attribute value |
 
 ```python
-from void_crawl.actions import GetText, GetAttribute
+from voidcrawl.actions import GetText, GetAttribute
 
 title = await GetText("h1").run(tab)
 href = await GetAttribute("a.logo", "href").run(tab)
@@ -83,7 +83,7 @@ href = await GetAttribute("a.logo", "href").run(tab)
 | `ScrollBy` | `dx: int, dy: int` | `None` | Scroll by relative offset |
 
 ```python
-from void_crawl.actions import ScrollTo, ScrollBy
+from voidcrawl.actions import ScrollTo, ScrollBy
 
 await ScrollTo(0, 0).run(tab)        # scroll to top
 await ScrollBy(0, 500).run(tab)      # scroll down 500px
@@ -103,7 +103,7 @@ await ScrollBy(0, 500).run(tab)      # scroll down 500px
 | `WaitForTimeout` | `ms: float` | `None` | Wait for a fixed duration |
 
 ```python
-from void_crawl.actions import WaitForSelector
+from voidcrawl.actions import WaitForSelector
 
 found = await WaitForSelector("#content", timeout=5.0).run(tab)
 if not found:
@@ -124,7 +124,7 @@ These actions bypass JavaScript entirely and dispatch input events at the Chrome
 | `CdpScrollUp/Down/Left/Right` | `amount: float` | Directional scroll |
 
 ```python
-from void_crawl.actions import CdpClick, CdpTypeText
+from voidcrawl.actions import CdpClick, CdpTypeText
 
 await CdpClick(100.0, 200.0).run(tab)
 await CdpTypeText("hello world").run(tab)

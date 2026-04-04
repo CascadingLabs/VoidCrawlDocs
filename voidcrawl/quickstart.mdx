@@ -8,7 +8,7 @@ import { Steps } from '@astrojs/starlight/components';
 ## Install
 
 ```bash
-uv add void-crawl
+uv add voidcrawl
 ```
 
 Make sure Chrome or Chromium is installed on your system.
@@ -19,7 +19,7 @@ The pool pre-opens tabs and recycles them, giving near-instant page loads after 
 
 ```python
 import asyncio
-from void_crawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PoolConfig
 
 async def main():
     async with BrowserPool(PoolConfig()) as pool:
@@ -43,7 +43,7 @@ For direct browser control without pooling:
 
 ```python
 import asyncio
-from void_crawl import BrowserConfig, BrowserSession
+from voidcrawl import BrowserConfig, BrowserSession
 
 async def main():
     async with BrowserSession(BrowserConfig()) as session:
@@ -79,7 +79,7 @@ See [Docker & VNC](/voidcrawl/guides/docker/) for the full guide.
 
 ```python
 import asyncio
-from void_crawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PoolConfig
 
 async def main():
     async with BrowserPool(PoolConfig()) as pool:

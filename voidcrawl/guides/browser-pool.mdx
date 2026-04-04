@@ -41,7 +41,7 @@ Launching a new Chrome instance and opening a tab takes 1-3 seconds. If you're s
 ### Via constructor
 
 ```python
-from void_crawl import BrowserConfig, BrowserPool, PoolConfig
+from voidcrawl import BrowserConfig, BrowserPool, PoolConfig
 
 config = PoolConfig(
     browsers=2,
@@ -59,7 +59,7 @@ async with BrowserPool(config) as pool:
 ### Via environment variables
 
 ```python
-from void_crawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PoolConfig
 
 # PoolConfig.from_env() reads all config from env vars
 config = PoolConfig.from_env()
@@ -84,7 +84,7 @@ The pool's semaphore naturally limits concurrency. Use `asyncio.gather` to fetch
 
 ```python
 import asyncio
-from void_crawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PoolConfig
 
 async def main():
     async with BrowserPool(PoolConfig(tabs_per_browser=4)) as pool:

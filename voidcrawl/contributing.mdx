@@ -43,7 +43,7 @@ Contributions are welcome. VoidCrawl is a hybrid Rust/Python project -- below is
 | **cargo check** | Type checking | `cargo check` |
 | **Clippy** | Linting | `cargo clippy --workspace --all-targets` |
 | **rustfmt** | Formatting | `cargo +nightly fmt --all` |
-| **cargo test** | Integration tests | `cargo test -p void_crawl_core -- --test-threads=1` |
+| **cargo test** | Integration tests | `cargo test -p voidcrawl_core -- --test-threads=1` |
 
 ### Python
 
@@ -59,7 +59,7 @@ Contributions are welcome. VoidCrawl is a hybrid Rust/Python project -- below is
 Rust integration tests require Chrome and must run single-threaded (they share a browser process):
 
 ```bash
-cargo test -p void_crawl_core -- --test-threads=1
+cargo test -p voidcrawl_core -- --test-threads=1
 ```
 
 Python integration tests require the extension to be built first (`./build.sh`):
@@ -70,7 +70,7 @@ uv run pytest tests/ -v
 
 ## Commit Guidelines
 
-We prefer (don't require) [conventional commits](https://www.conventionalcommits.org/):
+We prefer (but don't require) [conventional commits](https://www.conventionalcommits.org/):
 
 ```bash
 git commit -m "feat: add new pool eviction strategy"

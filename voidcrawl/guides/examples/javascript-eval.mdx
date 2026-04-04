@@ -10,7 +10,7 @@ Run JavaScript expressions inside the browser and get results back as native Pyt
 ```python
 import asyncio
 
-from void_crawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PoolConfig
 
 
 async def main() -> None:
@@ -34,7 +34,7 @@ async def main() -> None:
         print(f"Viewport: {dims}")
 
         # Modify the DOM via JS
-        await tab.evaluate_js("document.title = 'Modified by void_crawl'")
+        await tab.evaluate_js("document.title = 'Modified by voidcrawl'")
         print(f"New title: {await tab.title()}")
 
 
@@ -54,5 +54,5 @@ if __name__ == "__main__":
 User agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ...
 Number of <p> tags: 2
 Viewport: {'w': 1920, 'h': 1080}
-New title: Modified by void_crawl
+New title: Modified by voidcrawl
 ```
