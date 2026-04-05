@@ -97,7 +97,7 @@ await page.delete_cookie("locale", domain="example.com")
 
 ## Intercepting and Logging Network Requests
 
-VoidCrawl ships built-in actions for capturing network requests using the browser's PerformanceObserver API. Install the observer before navigation, then collect entries after the page loads.
+VoidCrawl ships built-in actions for capturing network requests using the browser's PerformanceObserver API. Install the observer after navigation -- it uses `buffered: true` to retroactively capture all resources from the current page load.
 
 ### Log all request URLs during a page load
 
@@ -113,21 +113,18 @@ from voidcrawl.actions import (
 
 async def main() -> None:
     async with BrowserSession(BrowserConfig()) as browser:
-        page = await browser.new_page("about:blank")
-
-        # 1. Install the observer BEFORE navigating.
-        await InstallNetworkObserver().run(page)
-
-        # 2. Navigate to the target page.
-        await page.navigate("https://example.com")
+        page = await browser.new_page("https://example.com")
         await page.wait_for_network_idle()
 
-        # 3. Collect all observed requests.
+        # Install observer after load -- buffered: true retroactively
+        # captures all resources from the current navigation.
+        await InstallNetworkObserver().run(page)
         requests = await CollectNetworkRequests(clear=True).run(page)
 
         print(f"Captured {len(requests)} network requests:\n")
         for r in requests:
-            print(f"  [{r['type']:>10}]  {r['duration']:>4}ms  {r['size']:>6}B  {r['name']}")
+            print(f"  [{r['type']:>10}]  {r['duration']:>4}ms"
+                  f"  {r['size']:>6}B  {r['name']}")
 
 
 asyncio.run(main())
@@ -148,13 +145,12 @@ from voidcrawl.actions import (
 async def main() -> None:
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
-            # Install observer on the blank tab before navigation.
+            resp = await tab.goto("https://example.com")
+            print(f"Page: {resp.url} (status {resp.status_code})")
+
             await InstallNetworkObserver().run(tab)
-
-            await tab.navigate("https://example.com")
-            await tab.wait_for_network_idle()
-
             requests = await CollectNetworkRequests().run(tab)
+
             print(f"{len(requests)} request URLs captured")
             for r in requests:
                 print(f"  {r['name']}")

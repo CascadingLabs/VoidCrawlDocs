@@ -27,7 +27,9 @@ python examples/basic_navigation.py
 These additional examples live in the `examples/` directory but don't have dedicated doc pages yet. Run them directly:
 
 ```bash
-python examples/custom_headers_and_proxy.py   # Set custom HTTP headers and proxy config
+python examples/cookies.py                     # Set, read, and delete cookies via CDP
+python examples/network_logging.py             # Capture and inspect all network requests
+python examples/custom_headers_and_proxy.py    # Set custom HTTP headers and proxy config
 python examples/connect_to_existing_chrome.py  # Attach to already-running Chrome via ws_url
 python examples/concurrent_stress_test.py      # 30 tasks across 3 pools with interactive search
 python examples/debug_session.py               # Interactive step debugger (debug=True)
