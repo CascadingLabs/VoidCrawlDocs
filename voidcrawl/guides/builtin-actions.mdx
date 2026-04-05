@@ -110,6 +110,32 @@ if not found:
     print("Element did not appear within 5 seconds")
 ```
 
+### Network
+
+| Action | Parameters | Returns | Description |
+|--------|-----------|---------|-------------|
+| `InstallNetworkObserver` | — | `None` | Install a PerformanceObserver that records all network requests. Call before navigation. |
+| `CollectNetworkRequests` | `clear: bool` | `list[dict]` | Retrieve captured network entries (name, type, duration, size). |
+
+```python
+from voidcrawl.actions import (
+    InstallNetworkObserver,
+    CollectNetworkRequests,
+)
+
+# Install before navigating
+await InstallNetworkObserver().run(tab)
+await tab.navigate("https://example.com")
+await tab.wait_for_network_idle()
+
+# Collect and clear the log
+requests = await CollectNetworkRequests(clear=True).run(tab)
+for r in requests:
+    print(f"  {r['type']:>10}  {r['name']}")
+```
+
+See [Cookbook: Network logging](/voidcrawl/guides/cookbook/#intercepting-and-logging-network-requests) for more detailed examples.
+
 ## CDP-Tier Actions
 
 These actions bypass JavaScript entirely and dispatch input events at the Chrome protocol level. Use them when you need low-level control or when JS-tier actions are blocked by the page.
@@ -156,6 +182,11 @@ async with pool.acquire() as tab:
     # Interaction
     await tab.click_element("#btn")
     await tab.type_into("#input", "text")
+
+    # Cookies
+    await tab.set_cookie("key", "value", secure=True)
+    cookies = await tab.get_cookies()
+    await tab.delete_cookie("key")
 
     # JS evaluation
     result = await tab.evaluate_js("document.title")

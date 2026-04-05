@@ -9,7 +9,7 @@ Practical recipes for common VoidCrawl tasks that go beyond basic navigation.
 
 ## Setting Custom Cookies
 
-VoidCrawl does not expose a dedicated cookie API because Chrome's CDP cookie model is domain-scoped -- cookies must be set **for a specific domain** before navigating to it. Use `evaluate_js()` to set cookies via JavaScript.
+VoidCrawl exposes Chrome's CDP cookie API directly through `set_cookie()`, `get_cookies()`, and `delete_cookie()`. Cookies are set at the CDP level, which means they support `HttpOnly` and `Secure` flags -- unlike `document.cookie`.
 
 ### Set cookies before navigating to a target domain
 
@@ -21,25 +21,24 @@ from voidcrawl import BrowserConfig, BrowserSession
 
 async def main() -> None:
     async with BrowserSession(BrowserConfig()) as browser:
-        # 1. Navigate to the target domain's root so document.cookie
-        #    is scoped correctly.
-        page = await browser.new_page("https://example.com/favicon.ico")
+        # 1. Navigate to the target domain first so the cookie
+        #    is scoped to the right origin.
+        page = await browser.new_page("https://example.com/robots.txt")
 
-        # 2. Set cookies via JavaScript -- they persist for subsequent
-        #    navigations to the same domain within this tab.
-        await page.evaluate_js("""
-            document.cookie = "session_id=abc123; path=/; SameSite=Lax";
-            document.cookie = "locale=en-US; path=/; SameSite=Lax";
-        """)
+        # 2. Set cookies via the CDP API -- they persist for
+        #    subsequent navigations within this tab.
+        await page.set_cookie("session_id", "abc123", path="/")
+        await page.set_cookie("locale", "en-US", path="/")
 
-        # 3. Navigate to the real target -- cookies are sent automatically.
+        # 3. Navigate to the real target -- cookies are sent.
         resp = await page.goto("https://example.com/dashboard")
         print(f"Status: {resp.status_code}")
         print(f"HTML length: {len(resp.html)}")
 
         # 4. Verify cookies are set.
-        cookies = await page.evaluate_js("document.cookie")
-        print(f"Cookies: {cookies}")
+        cookies = await page.get_cookies()
+        for c in cookies:
+            print(f"  {c['name']}={c['value']}")
 
 
 asyncio.run(main())
@@ -56,13 +55,14 @@ from voidcrawl import BrowserPool, PoolConfig
 async def main() -> None:
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
-            # Navigate to origin first so cookies are domain-scoped.
+            # Navigate to origin first so the cookie is domain-scoped.
             await tab.navigate("https://example.com/robots.txt")
             await tab.wait_for_navigation()
 
-            await tab.evaluate_js("""
-                document.cookie = "auth_token=my-secret; path=/; Secure; SameSite=Strict";
-            """)
+            await tab.set_cookie(
+                "auth_token", "my-secret",
+                path="/", secure=True, http_only=True,
+            )
 
             # Now fetch the actual page -- cookie is included.
             resp = await tab.goto("https://example.com/api/data")
@@ -72,72 +72,62 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-<Card title="HttpOnly cookies">
+<Card title="CDP cookies vs document.cookie">
 
-`document.cookie` cannot set `HttpOnly` cookies (the browser enforces this). If you need `HttpOnly` cookies, navigate to an endpoint that issues `Set-Cookie` headers, or use a proxy that injects the header.
+`set_cookie()` uses Chrome's CDP cookie API, which can set `HttpOnly` and `Secure` cookies -- unlike `document.cookie` from JavaScript. This is the recommended approach for authentication tokens and session cookies.
 
 </Card>
 
 ### Read and delete cookies
 
 ```python
-# Read all cookies for the current domain
-cookies = await page.evaluate_js("document.cookie")
-# "session_id=abc123; locale=en-US"
+# Read all cookies for the current page URL
+cookies = await page.get_cookies()
+for c in cookies:
+    print(f"{c['name']}={c['value']} (domain={c['domain']})")
 
-# Delete a cookie
-await page.evaluate_js("""
-    document.cookie = "session_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-""")
+# Delete a cookie by name
+await page.delete_cookie("session_id")
+
+# Delete scoped to a specific domain
+await page.delete_cookie("locale", domain="example.com")
 ```
 
 ---
 
 ## Intercepting and Logging Network Requests
 
-VoidCrawl does not expose CDP's `Network` domain events directly to Python (the Rust core uses them internally for `goto()` and `PageResponse`). However, you can log all network requests using the **PerformanceObserver** API in JavaScript -- no CDP subscription needed.
+VoidCrawl ships built-in actions for capturing network requests using the browser's PerformanceObserver API. Install the observer before navigation, then collect entries after the page loads.
 
 ### Log all request URLs during a page load
 
 ```python
 import asyncio
-import json
 
 from voidcrawl import BrowserConfig, BrowserSession
+from voidcrawl.actions import (
+    CollectNetworkRequests,
+    InstallNetworkObserver,
+)
 
 
 async def main() -> None:
     async with BrowserSession(BrowserConfig()) as browser:
         page = await browser.new_page("about:blank")
 
-        # 1. Install a PerformanceObserver BEFORE navigating.
-        #    It records every resource URL into a global array.
-        await page.evaluate_js("""
-            window.__vcRequests = [];
-            const observer = new PerformanceObserver((list) => {
-                for (const entry of list.getEntries()) {
-                    window.__vcRequests.push({
-                        url: entry.name,
-                        type: entry.initiatorType,
-                        duration: Math.round(entry.duration),
-                        size: entry.transferSize || 0,
-                    });
-                }
-            });
-            observer.observe({ type: 'resource', buffered: true });
-        """)
+        # 1. Install the observer BEFORE navigating.
+        await InstallNetworkObserver().run(page)
 
         # 2. Navigate to the target page.
         await page.navigate("https://example.com")
         await page.wait_for_network_idle()
 
         # 3. Collect all observed requests.
-        raw = await page.evaluate_js("JSON.stringify(window.__vcRequests)")
-        requests = json.loads(str(raw))
+        requests = await CollectNetworkRequests(clear=True).run(page)
 
         print(f"Captured {len(requests)} network requests:\n")
         for r in requests:
-            print(f"  [{r['type']:>10}]  {r['duration']:>4}ms  {r['size']:>6}B  {r['url']}")
+            print(f"  [{r['type']:>10}]  {r['duration']:>4}ms  {r['size']:>6}B  {r['name']}")
 
 
 asyncio.run(main())
@@ -147,34 +137,27 @@ asyncio.run(main())
 
 ```python
 import asyncio
-import json
 
 from voidcrawl import BrowserPool, PoolConfig
-
-OBSERVER_JS = """
-window.__vcRequests = [];
-new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) {
-        window.__vcRequests.push(entry.name);
-    }
-}).observe({ type: 'resource', buffered: true });
-"""
+from voidcrawl.actions import (
+    CollectNetworkRequests,
+    InstallNetworkObserver,
+)
 
 
 async def main() -> None:
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
             # Install observer on the blank tab before navigation.
-            await tab.evaluate_js(OBSERVER_JS)
+            await InstallNetworkObserver().run(tab)
 
             await tab.navigate("https://example.com")
             await tab.wait_for_network_idle()
 
-            raw = await tab.evaluate_js("JSON.stringify(window.__vcRequests)")
-            urls = json.loads(str(raw))
-            print(f"{len(urls)} request URLs captured")
-            for url in urls:
-                print(f"  {url}")
+            requests = await CollectNetworkRequests().run(tab)
+            print(f"{len(requests)} request URLs captured")
+            for r in requests:
+                print(f"  {r['name']}")
 
 
 asyncio.run(main())
@@ -187,8 +170,13 @@ asyncio.run(main())
 xhr_requests = await page.evaluate_js("""
     JSON.stringify(
         performance.getEntriesByType('resource')
-            .filter(e => e.initiatorType === 'xmlhttprequest' || e.initiatorType === 'fetch')
-            .map(e => ({ url: e.name, status: e.responseStatus, duration: Math.round(e.duration) }))
+            .filter(e => e.initiatorType === 'xmlhttprequest'
+                      || e.initiatorType === 'fetch')
+            .map(e => ({
+                url: e.name,
+                status: e.responseStatus,
+                duration: Math.round(e.duration),
+            }))
     )
 """)
 ```
@@ -290,24 +278,25 @@ async def main() -> None:
 Wrap your per-tab setup into a custom `JsActionNode` so it can be composed with other actions in a `Flow`:
 
 ```python
-from voidcrawl.actions import Flow, GetText, JsActionNode, WaitForSelector
+from voidcrawl.actions import (
+    Flow, GetText, JsActionNode, WaitForSelector, inline_js,
+)
 
 
 class SetTimezone(JsActionNode):
     """Override the browser's reported timezone."""
 
+    js = inline_js("""\
+Intl.DateTimeFormat = class extends Intl.DateTimeFormat {
+    resolvedOptions() {
+        return { ...super.resolvedOptions(), timeZone: __params.timezone };
+    }
+};
+return __params.timezone;
+""")
+
     def __init__(self, timezone: str) -> None:
         self.timezone = timezone
-
-    def js(self) -> str:
-        return f"""
-            Intl.DateTimeFormat = class extends Intl.DateTimeFormat {{
-                resolvedOptions() {{
-                    return {{ ...super.resolvedOptions(), timeZone: "{self.timezone}" }};
-                }}
-            }};
-            "{self.timezone}"
-        """
 
 
 # Compose into a flow:
