@@ -37,16 +37,15 @@ async def main() -> None:
     async with BrowserPool(config) as pool:
         # -- Basic navigation --
         async with pool.acquire() as tab:
-            event = await tab.goto(
+            resp = await tab.goto(
                 "https://en.wikipedia.org/wiki/Web_scraping",
                 timeout=30.0,
             )
-            print(f"Wait event: {event}")
+            print(f"Status: {resp.status_code}, redirected: {resp.redirected}")
 
             title = await tab.title()
-            html = await tab.content()
             print(f"Title: {title}")
-            print(f"HTML: {len(html):,} chars")
+            print(f"HTML: {len(resp.html):,} chars")
 
             # DOM queries
             headings = await tab.query_selector_all("#toc li a")
@@ -96,7 +95,7 @@ if __name__ == "__main__":
 
 - `chrome_ws_urls` tells the pool to connect to existing Chrome instances instead of launching new ones.
 - `headless=False` in `BrowserConfig` is required when connecting to headful Chrome.
-- `goto()` combines `navigate()` + `wait_for_network_idle()` in one call. The return value indicates what event was received.
+- `goto()` combines `navigate()` + `wait_for_network_idle()` in one call and returns a `PageResponse` with HTML, final URL, HTTP status code, and redirect info.
 - The parallel fetch demonstrates two tabs working simultaneously -- visible in VNC as two windows navigating at once.
 
 See the [Docker & VNC guide](/voidcrawl/guides/docker/) for the full setup.

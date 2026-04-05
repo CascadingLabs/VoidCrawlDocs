@@ -21,3 +21,17 @@ python examples/basic_navigation.py
 | [Actions Demo](/voidcrawl/guides/examples/actions-demo/) | Built-in actions, custom JS actions, Flows, CDP actions |
 | [Docker Headful](/voidcrawl/guides/examples/docker-headful/) | Connect to Docker Chrome with GPU + VNC |
 | [Multi-Page](/voidcrawl/guides/examples/multi-page/) | Multiple tabs in a single session |
+
+## More examples (run from the repo)
+
+These additional examples live in the `examples/` directory but don't have dedicated doc pages yet. Run them directly:
+
+```bash
+python examples/custom_headers_and_proxy.py   # Set custom HTTP headers and proxy config
+python examples/connect_to_existing_chrome.py  # Attach to already-running Chrome via ws_url
+python examples/concurrent_stress_test.py      # 30 tasks across 3 pools with interactive search
+python examples/debug_session.py               # Interactive step debugger (debug=True)
+python examples/httpx_vs_voidcrawl.py          # Compare plain HTTP vs JS-rendered scraping
+python examples/performance_modes.py           # Scale profiles and hardware-aware pool sizing
+python examples/docker_headless.py             # Docker headless with PoolConfig.from_docker()
+```

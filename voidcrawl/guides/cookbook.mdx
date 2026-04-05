@@ -1,0 +1,388 @@
+---
+title: Cookbook
+description: Recipes for cookies, network logging, per-tab headers, and response handling in VoidCrawl.
+---
+
+import { Card } from '@astrojs/starlight/components';
+
+Practical recipes for common VoidCrawl tasks that go beyond basic navigation.
+
+## Setting Custom Cookies
+
+VoidCrawl does not expose a dedicated cookie API because Chrome's CDP cookie model is domain-scoped -- cookies must be set **for a specific domain** before navigating to it. Use `evaluate_js()` to set cookies via JavaScript.
+
+### Set cookies before navigating to a target domain
+
+```python
+import asyncio
+
+from voidcrawl import BrowserConfig, BrowserSession
+
+
+async def main() -> None:
+    async with BrowserSession(BrowserConfig()) as browser:
+        # 1. Navigate to the target domain's root so document.cookie
+        #    is scoped correctly.
+        page = await browser.new_page("https://example.com/favicon.ico")
+
+        # 2. Set cookies via JavaScript -- they persist for subsequent
+        #    navigations to the same domain within this tab.
+        await page.evaluate_js("""
+            document.cookie = "session_id=abc123; path=/; SameSite=Lax";
+            document.cookie = "locale=en-US; path=/; SameSite=Lax";
+        """)
+
+        # 3. Navigate to the real target -- cookies are sent automatically.
+        resp = await page.goto("https://example.com/dashboard")
+        print(f"Status: {resp.status_code}")
+        print(f"HTML length: {len(resp.html)}")
+
+        # 4. Verify cookies are set.
+        cookies = await page.evaluate_js("document.cookie")
+        print(f"Cookies: {cookies}")
+
+
+asyncio.run(main())
+```
+
+### Set cookies with a pool
+
+```python
+import asyncio
+
+from voidcrawl import BrowserPool, PoolConfig
+
+
+async def main() -> None:
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            # Navigate to origin first so cookies are domain-scoped.
+            await tab.navigate("https://example.com/robots.txt")
+            await tab.wait_for_navigation()
+
+            await tab.evaluate_js("""
+                document.cookie = "auth_token=my-secret; path=/; Secure; SameSite=Strict";
+            """)
+
+            # Now fetch the actual page -- cookie is included.
+            resp = await tab.goto("https://example.com/api/data")
+            print(f"{resp.status_code} -- {len(resp.html)} chars")
+
+
+asyncio.run(main())
+```
+
+<Card title="HttpOnly cookies">
+
+`document.cookie` cannot set `HttpOnly` cookies (the browser enforces this). If you need `HttpOnly` cookies, navigate to an endpoint that issues `Set-Cookie` headers, or use a proxy that injects the header.
+
+</Card>
+
+### Read and delete cookies
+
+```python
+# Read all cookies for the current domain
+cookies = await page.evaluate_js("document.cookie")
+# "session_id=abc123; locale=en-US"
+
+# Delete a cookie
+await page.evaluate_js("""
+    document.cookie = "session_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+""")
+```
+
+---
+
+## Intercepting and Logging Network Requests
+
+VoidCrawl does not expose CDP's `Network` domain events directly to Python (the Rust core uses them internally for `goto()` and `PageResponse`). However, you can log all network requests using the **PerformanceObserver** API in JavaScript -- no CDP subscription needed.
+
+### Log all request URLs during a page load
+
+```python
+import asyncio
+import json
+
+from voidcrawl import BrowserConfig, BrowserSession
+
+
+async def main() -> None:
+    async with BrowserSession(BrowserConfig()) as browser:
+        page = await browser.new_page("about:blank")
+
+        # 1. Install a PerformanceObserver BEFORE navigating.
+        #    It records every resource URL into a global array.
+        await page.evaluate_js("""
+            window.__vcRequests = [];
+            const observer = new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                    window.__vcRequests.push({
+                        url: entry.name,
+                        type: entry.initiatorType,
+                        duration: Math.round(entry.duration),
+                        size: entry.transferSize || 0,
+                    });
+                }
+            });
+            observer.observe({ type: 'resource', buffered: true });
+        """)
+
+        # 2. Navigate to the target page.
+        await page.navigate("https://example.com")
+        await page.wait_for_network_idle()
+
+        # 3. Collect all observed requests.
+        raw = await page.evaluate_js("JSON.stringify(window.__vcRequests)")
+        requests = json.loads(str(raw))
+
+        print(f"Captured {len(requests)} network requests:\n")
+        for r in requests:
+            print(f"  [{r['type']:>10}]  {r['duration']:>4}ms  {r['size']:>6}B  {r['url']}")
+
+
+asyncio.run(main())
+```
+
+### Log requests in a pool context
+
+```python
+import asyncio
+import json
+
+from voidcrawl import BrowserPool, PoolConfig
+
+OBSERVER_JS = """
+window.__vcRequests = [];
+new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+        window.__vcRequests.push(entry.name);
+    }
+}).observe({ type: 'resource', buffered: true });
+"""
+
+
+async def main() -> None:
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            # Install observer on the blank tab before navigation.
+            await tab.evaluate_js(OBSERVER_JS)
+
+            await tab.navigate("https://example.com")
+            await tab.wait_for_network_idle()
+
+            raw = await tab.evaluate_js("JSON.stringify(window.__vcRequests)")
+            urls = json.loads(str(raw))
+            print(f"{len(urls)} request URLs captured")
+            for url in urls:
+                print(f"  {url}")
+
+
+asyncio.run(main())
+```
+
+### Filter requests by type
+
+```python
+# After navigation, filter for specific resource types:
+xhr_requests = await page.evaluate_js("""
+    JSON.stringify(
+        performance.getEntriesByType('resource')
+            .filter(e => e.initiatorType === 'xmlhttprequest' || e.initiatorType === 'fetch')
+            .map(e => ({ url: e.name, status: e.responseStatus, duration: Math.round(e.duration) }))
+    )
+""")
+```
+
+<Card title="Limitations">
+
+The PerformanceObserver API sees all sub-resource requests but cannot modify or block them. For request interception (e.g., blocking analytics), use `evaluate_js` to override `fetch` or `XMLHttpRequest` before navigation.
+
+</Card>
+
+---
+
+## Dynamic Per-Tab Headers and Fingerprints in a Pool
+
+VoidCrawl's `set_headers()` method applies to a single tab -- headers do not leak between tabs in a pool. This makes it straightforward to assign different identities per tab.
+
+### Rotate headers per tab acquisition
+
+```python
+import asyncio
+import itertools
+
+from voidcrawl import BrowserPool, PoolConfig
+
+USER_AGENTS = itertools.cycle([
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+])
+
+LANGUAGES = itertools.cycle(["en-US,en;q=0.9", "ja-JP,ja;q=0.9", "de-DE,de;q=0.9"])
+
+
+async def fetch_with_identity(pool: BrowserPool, url: str) -> str:
+    async with pool.acquire() as tab:
+        # set_headers() applies only to THIS tab -- other tabs are unaffected.
+        await tab.set_headers({
+            "User-Agent": next(USER_AGENTS),
+            "Accept-Language": next(LANGUAGES),
+            "X-Request-ID": f"vc-{id(tab)}",
+        })
+
+        resp = await tab.goto(url)
+        return resp.html
+
+
+async def main() -> None:
+    urls = [
+        "https://example.com/page/1",
+        "https://example.com/page/2",
+        "https://example.com/page/3",
+    ]
+    async with BrowserPool(PoolConfig(tabs_per_browser=3)) as pool:
+        results = await asyncio.gather(*[fetch_with_identity(pool, u) for u in urls])
+        for url, html in zip(urls, results):
+            print(f"{url} -> {len(html)} chars")
+
+
+asyncio.run(main())
+```
+
+### Per-tab fingerprint customisation via JavaScript
+
+For deeper fingerprint control (timezone, screen dimensions, WebGL), inject JavaScript overrides on each tab before navigation:
+
+```python
+async def apply_fingerprint(
+    tab, *, timezone: str, screen_w: int, screen_h: int
+) -> None:
+    """Override browser fingerprint signals for this tab."""
+    await tab.evaluate_js(f"""
+        // Override timezone
+        Intl.DateTimeFormat = class extends Intl.DateTimeFormat {{
+            resolvedOptions() {{
+                return {{ ...super.resolvedOptions(), timeZone: "{timezone}" }};
+            }}
+        }};
+
+        // Override screen dimensions
+        Object.defineProperty(screen, 'width', {{ get: () => {screen_w} }});
+        Object.defineProperty(screen, 'height', {{ get: () => {screen_h} }});
+    """)
+
+
+async def main() -> None:
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            await apply_fingerprint(
+                tab, timezone="America/New_York", screen_w=1920, screen_h=1080
+            )
+            await tab.set_headers({"Accept-Language": "en-US,en;q=0.9"})
+
+            resp = await tab.goto("https://example.com")
+            print(f"{resp.status_code} -- {len(resp.html)} chars")
+```
+
+### Using the Actions framework for reusable tab setup
+
+Wrap your per-tab setup into a custom `JsActionNode` so it can be composed with other actions in a `Flow`:
+
+```python
+from voidcrawl.actions import Flow, GetText, JsActionNode, WaitForSelector
+
+
+class SetTimezone(JsActionNode):
+    """Override the browser's reported timezone."""
+
+    def __init__(self, timezone: str) -> None:
+        self.timezone = timezone
+
+    def js(self) -> str:
+        return f"""
+            Intl.DateTimeFormat = class extends Intl.DateTimeFormat {{
+                resolvedOptions() {{
+                    return {{ ...super.resolvedOptions(), timeZone: "{self.timezone}" }};
+                }}
+            }};
+            "{self.timezone}"
+        """
+
+
+# Compose into a flow:
+flow = (
+    Flow()
+    .add(SetTimezone("Europe/Berlin"))
+    .add(WaitForSelector("h1"))
+    .add(GetText("h1"))
+)
+
+# result = await flow.run(tab)
+```
+
+<Card title="Design note">
+
+VoidCrawl intentionally does not have a middleware/plugin system. The Actions framework and `evaluate_js()` provide composable, per-tab customisation without hidden global state. If you need the same setup on every tab, wrap it in a helper function that runs after each `pool.acquire()`.
+
+</Card>
+
+---
+
+## Using PageResponse for Status-Aware Scraping
+
+`goto()` returns a `PageResponse` that tells you the HTTP status, final URL, and whether redirects occurred -- before you parse the HTML:
+
+```python
+async with pool.acquire() as tab:
+    resp = await tab.goto("https://example.com/old-page")
+
+    if resp.redirected:
+        print(f"Redirected to: {resp.url}")
+
+    if resp.status_code and resp.status_code >= 400:
+        print(f"HTTP {resp.status_code} -- skipping")
+    else:
+        print(f"Got {len(resp.html)} chars from {resp.url}")
+```
+
+`PageResponse` attributes:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `html` | `str` | Full outer HTML after network idle |
+| `url` | `str` | Final URL after any redirects |
+| `status_code` | `int \| None` | HTTP status of the document response, or `None` when served from cache/service worker |
+| `redirected` | `bool` | `True` when at least one HTTP redirect occurred |
+
+`status_code` is `None` when the page was served from cache or a service worker (no network response):
+
+```python
+if resp.status_code is None:
+    print("Served from cache -- no HTTP status available")
+```
+
+---
+
+## Combining set_headers() with Stealth Mode
+
+`set_headers()` overrides HTTP headers at the CDP level **after** stealth patches are applied. The two are complementary -- stealth handles Chrome flags and JS patches, while `set_headers()` controls what the server sees in HTTP:
+
+```python
+from voidcrawl import BrowserConfig, BrowserSession
+
+async with BrowserSession(BrowserConfig(stealth=True)) as browser:
+    page = await browser.new_page("about:blank")
+
+    # Stealth is already active -- navigator.webdriver is undefined,
+    # automation flags are stripped. Now layer custom HTTP headers:
+    await page.set_headers({
+        "Accept-Language": "ja-JP,ja;q=0.9",
+        "Referer": "https://www.google.com/",
+    })
+
+    resp = await page.goto("https://waf-protected-site.com")
+    print(f"Status: {resp.status_code}, {len(resp.html)} chars")
+```
+
+See also: [Stealth Mode](/voidcrawl/guides/stealth/) for details on what stealth mode patches and why.

@@ -75,8 +75,11 @@ async with BrowserPool(config) as pool:
 | `TABS_PER_BROWSER` | `4` | Idle tabs pre-opened per browser. |
 | `TAB_MAX_USES` | `50` | Hard-recycle a tab after this many uses. |
 | `TAB_MAX_IDLE_SECS` | `60` | Evict idle tabs after this many seconds. |
+| `ACQUIRE_TIMEOUT_SECS` | `30` | Max seconds `acquire()` waits when all tabs are busy. |
+| `AUTO_EVICT` | `1` | Set to `"0"` to disable background idle eviction. |
 | `CHROME_NO_SANDBOX` | -- | Set to `"1"` to pass `--no-sandbox`. |
 | `CHROME_HEADLESS` | `1` | Set to `"0"` for headful mode. |
+| `SCALE_PROFILE` | -- | `"minimal"`, `"balanced"`, or `"advanced"` -- overrides all other sizing vars. |
 
 ## Parallel Fetching
 
@@ -84,22 +87,23 @@ The pool's semaphore naturally limits concurrency. Use `asyncio.gather` to fetch
 
 ```python
 import asyncio
-from voidcrawl import BrowserPool, PoolConfig
+from voidcrawl import BrowserPool, PageResponse, PoolConfig
 
 async def main():
     async with BrowserPool(PoolConfig(tabs_per_browser=4)) as pool:
-        async def fetch(url: str) -> str:
+        async def fetch(url: str) -> PageResponse:
             async with pool.acquire() as tab:
-                await tab.navigate(url)
-                return await tab.content()
+                return await tab.goto(url)
 
         urls = ["https://example.com"] * 4
         results = await asyncio.gather(*[fetch(u) for u in urls])
-        for html in results:
-            print(f"  {len(html)} chars")
+        for resp in results:
+            print(f"  {resp.status_code} -- {len(resp.html)} chars")
 
 asyncio.run(main())
 ```
+
+`goto()` returns a `PageResponse` with HTML, final URL, HTTP status code, and redirect info -- see the [Cookbook](/voidcrawl/guides/cookbook/#using-pageresponse-for-status-aware-scraping) for details.
 
 If all 4 tabs are busy, the 5th `acquire()` call blocks until one is released. No overload, no crashes.
 
