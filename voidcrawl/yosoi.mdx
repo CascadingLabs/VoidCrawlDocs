@@ -1,0 +1,115 @@
+---
+title: Yosoi
+description: AI-powered CSS selector discovery for web scraping.
+---
+
+import JsonLd from '../../../src/components/JsonLd.astro';
+
+<JsonLd schema={{
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	name: "Yosoi",
+	applicationCategory: "DeveloperApplication",
+	operatingSystem: "Cross-platform",
+	description: "AI-powered CSS selector discovery for web scraping. Discover selectors once with an LLM, cache them, and scrape forever at zero cost.",
+	url: "https://cascadinglabs.com/yosoi/",
+	offers: {
+		"@type": "Offer",
+		price: "0",
+		priceCurrency: "USD",
+	},
+	author: {
+		"@type": "Organization",
+		name: "Cascading Labs",
+		url: "https://cascadinglabs.com",
+	},
+}} />
+
+<JsonLd schema={{
+	"@context": "https://schema.org",
+	"@type": "FAQPage",
+	mainEntity: [
+		{
+			"@type": "Question",
+			name: "How does Yosoi use VoidCrawl?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "Yosoi uses VoidCrawl as its browser automation backend. When a target page requires JavaScript rendering, VoidCrawl launches a headless browser, renders the page, and returns the fully hydrated DOM for Yosoi to analyse.",
+			},
+		},
+		{
+			"@type": "Question",
+			name: "What is AI-powered selector discovery?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "Yosoi sends a page's HTML to an LLM and asks it to find CSS selectors that match the data you described. Once discovered, selectors are cached so future scrapes cost nothing.",
+			},
+		},
+		{
+			"@type": "Question",
+			name: "Does Yosoi work with any LLM provider?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "Yes. Yosoi is provider-agnostic and works with OpenAI, Anthropic, local models, or any provider that exposes a compatible API.",
+			},
+		},
+		{
+			"@type": "Question",
+			name: "Can I use Yosoi without an LLM after the initial discovery?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "Yes. After the first run discovers and caches selectors, all subsequent scrapes use the cached selectors directly — no LLM calls, no cost.",
+			},
+		},
+	],
+}} />
+
+**Yosoi** is an AI-powered CSS selector discovery tool for web scraping. It uses an LLM [△](#ref-1) to discover the right selectors for any page, caches them, and lets you scrape at zero marginal cost from that point forward.
+
+## How VoidCrawl Powers Yosoi
+
+Yosoi relies on VoidCrawl as its browser automation backend. When a target page requires JavaScript rendering, VoidCrawl launches a headless browser via the Chrome DevTools Protocol [○](#ref-2), renders the page, and returns the fully hydrated DOM — giving Yosoi the complete markup it needs for accurate selector discovery.
+
+## Key Features
+
+- **AI-powered selector discovery** — Point at a URL and describe what you want; Yosoi finds the CSS selectors.
+- **Selector caching** — Discover once, scrape forever without further LLM calls.
+- **Provider-agnostic** — Works with any LLM provider (OpenAI, Anthropic, local models).
+- **Contract-based extraction** — Define typed data contracts and let Yosoi fill them.
+- **Validation built in** — Verify extracted data matches expected types and shapes.
+
+## FAQs
+
+<details>
+<summary>How does Yosoi use VoidCrawl?</summary>
+
+Yosoi uses VoidCrawl as its browser automation backend. When a target page requires JavaScript rendering, VoidCrawl launches a headless browser, renders the page, and returns the fully hydrated DOM for Yosoi to analyse.
+
+</details>
+
+<details>
+<summary>What is AI-powered selector discovery?</summary>
+
+Yosoi sends a page's HTML to an LLM and asks it to find CSS selectors that match the data you described. Once discovered, selectors are cached so future scrapes cost nothing.
+
+</details>
+
+<details>
+<summary>Does Yosoi work with any LLM provider?</summary>
+
+Yes. Yosoi is provider-agnostic and works with OpenAI, Anthropic, local models, or any provider that exposes a compatible API.
+
+</details>
+
+<details>
+<summary>Can I use Yosoi without an LLM after the initial discovery?</summary>
+
+Yes. After the first run discovers and caches selectors, all subsequent scrapes use the cached selectors directly — no LLM calls, no cost.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **Large Language Model**. *A neural network trained on large text corpora, used here for CSS selector inference from page structure.*
+
+<a id="ref-2"></a>○ **Chrome DevTools Protocol**. Google. *Protocol for instrumenting, inspecting, and debugging Chromium-based browsers.* https://chromedevtools.github.io/devtools-protocol/

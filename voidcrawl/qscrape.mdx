@@ -1,0 +1,119 @@
+---
+title: QScrape
+description: A web scraper evaluation suite for benchmarking and testing scrapers against fictional test websites.
+---
+
+import JsonLd from '../../../src/components/JsonLd.astro';
+
+<JsonLd schema={{
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	name: "QScrape",
+	applicationCategory: "DeveloperApplication",
+	operatingSystem: "Cross-platform",
+	description: "A web scraper evaluation suite that provides fictional test websites across multiple difficulty levels for benchmarking and testing scrapers.",
+	url: "https://qscrape.dev",
+	offers: {
+		"@type": "Offer",
+		price: "0",
+		priceCurrency: "USD",
+	},
+	author: {
+		"@type": "Organization",
+		name: "Cascading Labs",
+		url: "https://cascadinglabs.com",
+	},
+}} />
+
+<JsonLd schema={{
+	"@context": "https://schema.org",
+	"@type": "FAQPage",
+	mainEntity: [
+		{
+			"@type": "Question",
+			name: "Can I use QScrape sites with VoidCrawl?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "Yes. Point VoidCrawl at any QScrape URL to validate that your CDP-driven scraping pipeline correctly renders and extracts content from known, stable sources.",
+			},
+		},
+		{
+			"@type": "Question",
+			name: "Do QScrape L3 sites require a headless browser like VoidCrawl?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "L3 sites apply anti-bot techniques that often require full browser rendering. VoidCrawl's CDP-based automation handles JavaScript execution, session cookies, and request-header fingerprinting out of the box.",
+			},
+		},
+		{
+			"@type": "Question",
+			name: "Are QScrape sites suitable for production scraping?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "No. They are fictional test targets designed for evaluation and benchmarking, not for collecting real data.",
+			},
+		},
+		{
+			"@type": "Question",
+			name: "What is the difference between L2 and L3 sites?",
+			acceptedAnswer: {
+				"@type": "Answer",
+				text: "L2 sites add framework complexity (React, Svelte, etc.) but make no attempt to block scrapers. L3 sites actively apply anti-bot techniques such as rate limiting or obfuscated markup.",
+			},
+		},
+	],
+}} />
+
+[QScrape](https://qscrape.dev) is a web scraper evaluation suite that provides a collection of fictional test websites across multiple difficulty levels, designed for benchmarking and testing the capabilities of web scrapers.
+
+## Difficulty Levels
+
+- **L1 — Static HTML/CSS/JS**: Standard sites with no dynamic data and no web frameworks.
+- **L2 — Modern Frameworks**: Sites built with Svelte [△](#ref-1), React [○](#ref-2), Vue [◑](#ref-3), and Solid [◇](#ref-4), covering the DOM-level complexity typical of real-world SPAs.
+- **L3 — Anti-Bot**: Sites that actively resist automated access with rate limiting, fingerprinting, session enforcement, and obfuscated markup.
+
+## Using QScrape with VoidCrawl
+
+QScrape sites are ideal targets for testing VoidCrawl's browser automation. Point VoidCrawl at any QScrape URL to validate that your CDP-driven scraping pipeline correctly renders and extracts content from known, stable sources — without hitting live sites.
+
+L3 anti-bot sites are particularly useful for validating VoidCrawl's stealth mode and session handling before deploying against real targets.
+
+## FAQs
+
+<details>
+<summary>Can I use QScrape sites with VoidCrawl?</summary>
+
+Yes. Point VoidCrawl at any QScrape URL to validate that your CDP-driven scraping pipeline correctly renders and extracts content from known, stable sources.
+
+</details>
+
+<details>
+<summary>Do QScrape L3 sites require a headless browser like VoidCrawl?</summary>
+
+L3 sites apply anti-bot techniques that often require full browser rendering. VoidCrawl's CDP-based automation handles JavaScript execution, session cookies, and request-header fingerprinting out of the box.
+
+</details>
+
+<details>
+<summary>Are QScrape sites suitable for production scraping?</summary>
+
+No. They are fictional test targets designed for evaluation and benchmarking, not for collecting real data.
+
+</details>
+
+<details>
+<summary>What is the difference between L2 and L3 sites?</summary>
+
+L2 sites add framework complexity (React, Svelte, etc.) but make no attempt to block scrapers. L3 sites actively apply anti-bot techniques such as rate limiting or obfuscated markup.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **Svelte**. Rich Harris. *Compiler-based frontend framework.* https://svelte.dev/
+
+<a id="ref-2"></a>○ **React**. Meta. *JavaScript library for building user interfaces.* https://react.dev/
+
+<a id="ref-3"></a>◑ **Vue**. Evan You. *Progressive JavaScript framework for building UIs.* https://vuejs.org/
+
+<a id="ref-4"></a>◇ **Solid**. Ryan Carniato. *Fine-grained reactive UI library with no virtual DOM.* https://www.solidjs.com/
