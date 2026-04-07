@@ -37,7 +37,7 @@ Built on [chromiumoxide](https://github.com/mattsse/chromiumoxide) with a shared
 
 - **Rust performance, Python ergonomics.** The core is written in Rust. Every method is async. Python just awaits the results.
 - **Tab pooling.** `BrowserPool` pre-opens tabs and recycles them instead of closing and reopening. After the first warmup, acquiring a tab is near-instant.
-- **Stealth by default.** Anti-detection patches are applied automatically. No fake fingerprints -- just clean Chrome flags that don't advertise automation.
+- **Stealth by default.** Anti-detection patches are applied automatically. No fake fingerprints; just clean Chrome flags that don't advertise automation.
 - **No AGPL exposure.** Every dependency is MIT or Apache-2.0 licensed.
 - **Composable actions.** A two-tier action framework (JS and CDP) lets you build reusable browser interaction sequences.
 
@@ -50,7 +50,7 @@ from voidcrawl import BrowserPool, PoolConfig
 async def main():
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
-            await tab.navigate("https://example.com")
+            await tab.navigate("https://qscrape.dev")
             print(await tab.title())
             print(len(await tab.content()))
 

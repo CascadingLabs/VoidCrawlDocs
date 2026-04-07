@@ -4,6 +4,7 @@ description: Cold start vs. tab reuse, pool configuration, and the semaphore-bou
 ---
 
 import { Card } from '@astrojs/starlight/components';
+import BrowserPoolFigure from '../../../../src/components/BrowserPoolFigure.tsx';
 
 The `BrowserPool` is VoidCrawl's primary interface for concurrent browser automation. It pre-opens tabs across one or more Chrome processes and recycles them instead of closing and reopening. After the initial warmup, acquiring a tab is near-instant.
 
@@ -15,21 +16,7 @@ Launching a new Chrome instance and opening a tab takes 1-3 seconds. If you're s
 
 ### How the pool solves it
 
-```
-+-------------------------------------------+
-|  BrowserPool                              |
-|  +---------+  +---------+                 |
-|  |Session 0|  |Session 1|  ...            |
-|  | (9222)  |  | (9223)  |                 |
-|  +----+----+  +----+----+                 |
-|       |             |                     |
-|  +----+-------------+----+               |
-|  |   Ready Queue (deque)  |               |
-|  |  [Tab0, Tab1, Tab2..]  |               |
-|  +------------------------+               |
-|  Semaphore(permits = total tabs)          |
-+-------------------------------------------+
-```
+<BrowserPoolFigure client:visible />
 
 1. **Warmup**: Pre-open `tabs_per_browser x browsers` blank tabs and push them to the ready queue.
 2. **Acquire**: Decrement the semaphore (blocks if all tabs are busy), pop a tab from the queue. If `use_count >= tab_max_uses`, hard-recycle (close and reopen).
@@ -53,7 +40,7 @@ config = PoolConfig(
 
 async with BrowserPool(config) as pool:
     async with pool.acquire() as tab:
-        await tab.navigate("https://example.com")
+        await tab.navigate("https://qscrape.dev")
 ```
 
 ### Via environment variables
@@ -95,7 +82,7 @@ async def main():
             async with pool.acquire() as tab:
                 return await tab.goto(url)
 
-        urls = ["https://example.com"] * 4
+        urls = ["https://qscrape.dev"] * 4
         results = await asyncio.gather(*[fetch(u) for u in urls])
         for resp in results:
             print(f"  {resp.status_code} -- {len(resp.html)} chars")

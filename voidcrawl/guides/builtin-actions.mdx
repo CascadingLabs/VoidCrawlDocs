@@ -18,7 +18,7 @@ Actions are classes you instantiate and `run()` against a tab or page:
 from voidcrawl.actions import ClickElement, GetText, SetInputValue
 
 async with pool.acquire() as tab:
-    await tab.navigate("https://example.com")
+    await tab.navigate("https://qscrape.dev")
 
     # Each action is instantiated with parameters, then run against a tab
     await SetInputValue("#search", "hello").run(tab)
@@ -124,7 +124,7 @@ from voidcrawl.actions import (
 )
 
 # Navigate, then install observer (buffered: true picks up past entries)
-await tab.goto("https://example.com")
+await tab.goto("https://qscrape.dev")
 await InstallNetworkObserver().run(tab)
 
 # Collect and clear the log

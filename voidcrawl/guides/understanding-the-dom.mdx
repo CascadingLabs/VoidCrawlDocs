@@ -4,6 +4,7 @@ description: HTML vs. the DOM, why it matters for scraping, and how browser auto
 ---
 
 import { Card } from '@astrojs/starlight/components';
+import HtmlDomFigure from '../../../../src/components/HtmlDomFigure.tsx';
 
 ## HTML vs. the DOM
 
@@ -13,17 +14,7 @@ What you see on screen may look nothing like the original HTML the server sent.
 
 This distinction is why tools like `curl` or `requests` are useless for scraping modern web apps. They fetch the raw HTML -- the string the server sent. If the content is injected by JavaScript after the page loads, that string is a mostly-empty shell.
 
-```
-Server HTML:           <div id="app"></div>
-                            |
-                       Browser parses
-                            |
-DOM after JS:          <div id="app">
-                         <h1>Products</h1>
-                         <div class="product">...</div>
-                         <div class="product">...</div>
-                       </div>
-```
+<HtmlDomFigure client:visible />
 
 **VoidCrawl gives you access to the live DOM**, not the raw HTML. It controls a real Chrome instance that executes JavaScript, renders the page, and exposes the resulting DOM tree for you to query and interact with.
 

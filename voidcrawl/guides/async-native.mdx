@@ -3,6 +3,8 @@ title: Async Native
 description: What async-native means for you, how Tokio and asyncio work together, and common patterns.
 ---
 
+import AsyncLayerFigure from '../../../../src/components/AsyncLayerFigure.tsx';
+
 Every method in VoidCrawl is `async`. This isn't a convenience wrapper around synchronous code -- the entire stack, from Python down to the Rust CDP client, is built on async I/O.
 
 ## What This Means for You
@@ -25,21 +27,7 @@ Every method in VoidCrawl is `async`. This isn't a convenience wrapper around sy
 
 ## How It Works Under the Hood
 
-```
-Python (asyncio event loop)
-    |
-    | await tab.navigate(url)
-    |
-PyO3 bridge (pyo3-async-runtimes)
-    |
-    | future_into_py() converts Rust Future -> Python awaitable
-    |
-Tokio runtime (shared, auto-started)
-    |
-    | CDP WebSocket I/O
-    |
-Chrome (DevTools Protocol)
-```
+<AsyncLayerFigure client:visible />
 
 - Python's `asyncio.run()` drives the event loop.
 - When you `await` a VoidCrawl method, PyO3 hands the Rust future to a shared Tokio<sup>[△](#ref-1)</sup> runtime that runs underneath.
@@ -52,7 +40,7 @@ Chrome (DevTools Protocol)
 
 ```python
 async with pool.acquire() as tab:
-    await tab.navigate("https://example.com")
+    await tab.navigate("https://qscrape.dev")
     title = await tab.title()
     html = await tab.content()
 ```
@@ -66,7 +54,7 @@ async def fetch(pool, url):
         return await tab.content()
 
 results = await asyncio.gather(
-    fetch(pool, "https://example.com"),
+    fetch(pool, "https://qscrape.dev"),
     fetch(pool, "https://httpbin.org/html"),
 )
 ```

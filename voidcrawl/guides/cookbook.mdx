@@ -23,7 +23,7 @@ async def main() -> None:
     async with BrowserSession(BrowserConfig()) as browser:
         # 1. Navigate to the target domain first so the cookie
         #    is scoped to the right origin.
-        page = await browser.new_page("https://example.com/robots.txt")
+        page = await browser.new_page("https://qscrape.dev/robots.txt")
 
         # 2. Set cookies via the CDP API -- they persist for
         #    subsequent navigations within this tab.
@@ -31,7 +31,7 @@ async def main() -> None:
         await page.set_cookie("locale", "en-US", path="/")
 
         # 3. Navigate to the real target -- cookies are sent.
-        resp = await page.goto("https://example.com/dashboard")
+        resp = await page.goto("https://qscrape.dev/dashboard")
         print(f"Status: {resp.status_code}")
         print(f"HTML length: {len(resp.html)}")
 
@@ -56,7 +56,7 @@ async def main() -> None:
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
             # Navigate to origin first so the cookie is domain-scoped.
-            await tab.navigate("https://example.com/robots.txt")
+            await tab.navigate("https://qscrape.dev/robots.txt")
             await tab.wait_for_navigation()
 
             await tab.set_cookie(
@@ -65,7 +65,7 @@ async def main() -> None:
             )
 
             # Now fetch the actual page -- cookie is included.
-            resp = await tab.goto("https://example.com/api/data")
+            resp = await tab.goto("https://qscrape.dev/api/data")
             print(f"{resp.status_code} -- {len(resp.html)} chars")
 
 
@@ -90,7 +90,7 @@ for c in cookies:
 await page.delete_cookie("session_id")
 
 # Delete scoped to a specific domain
-await page.delete_cookie("locale", domain="example.com")
+await page.delete_cookie("locale", domain="qscrape.dev")
 ```
 
 ---
@@ -113,7 +113,7 @@ from voidcrawl.actions import (
 
 async def main() -> None:
     async with BrowserSession(BrowserConfig()) as browser:
-        page = await browser.new_page("https://example.com")
+        page = await browser.new_page("https://qscrape.dev")
         await page.wait_for_network_idle()
 
         # Install observer after load -- buffered: true retroactively
@@ -145,7 +145,7 @@ from voidcrawl.actions import (
 async def main() -> None:
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
-            resp = await tab.goto("https://example.com")
+            resp = await tab.goto("https://qscrape.dev")
             print(f"Page: {resp.url} (status {resp.status_code})")
 
             await InstallNetworkObserver().run(tab)
@@ -221,9 +221,9 @@ async def fetch_with_identity(pool: BrowserPool, url: str) -> str:
 
 async def main() -> None:
     urls = [
-        "https://example.com/page/1",
-        "https://example.com/page/2",
-        "https://example.com/page/3",
+        "https://qscrape.dev/page/1",
+        "https://qscrape.dev/page/2",
+        "https://qscrape.dev/page/3",
     ]
     async with BrowserPool(PoolConfig(tabs_per_browser=3)) as pool:
         results = await asyncio.gather(*[fetch_with_identity(pool, u) for u in urls])
@@ -265,7 +265,7 @@ async def main() -> None:
             )
             await tab.set_headers({"Accept-Language": "en-US,en;q=0.9"})
 
-            resp = await tab.goto("https://example.com")
+            resp = await tab.goto("https://qscrape.dev")
             print(f"{resp.status_code} -- {len(resp.html)} chars")
 ```
 
@@ -320,7 +320,7 @@ VoidCrawl intentionally does not have a middleware/plugin system. The Actions fr
 
 ```python
 async with pool.acquire() as tab:
-    resp = await tab.goto("https://example.com/old-page")
+    resp = await tab.goto("https://qscrape.dev/old-page")
 
     if resp.redirected:
         print(f"Redirected to: {resp.url}")

@@ -6,7 +6,7 @@ description: Runnable example scripts demonstrating common VoidCrawl patterns.
 All examples live in the [`examples/`](https://github.com/CascadingLabs/VoidCrawl/tree/main/examples) directory of the VoidCrawl repository and can be run directly after building.
 
 ```bash
-python examples/basic_navigation.py
+uv run examples/basic_navigation.py
 ```
 
 ## Available Examples
@@ -27,13 +27,13 @@ python examples/basic_navigation.py
 These additional examples live in the `examples/` directory but don't have dedicated doc pages yet. Run them directly:
 
 ```bash
-python examples/cookies.py                     # Set, read, and delete cookies via CDP
-python examples/network_logging.py             # Capture and inspect all network requests
-python examples/custom_headers_and_proxy.py    # Set custom HTTP headers and proxy config
-python examples/connect_to_existing_chrome.py  # Attach to already-running Chrome via ws_url
-python examples/concurrent_stress_test.py      # 30 tasks across 3 pools with interactive search
-python examples/debug_session.py               # Interactive step debugger (debug=True)
-python examples/httpx_vs_voidcrawl.py          # Compare plain HTTP vs JS-rendered scraping
-python examples/performance_modes.py           # Scale profiles and hardware-aware pool sizing
-python examples/docker_headless.py             # Docker headless with PoolConfig.from_docker()
+uv run examples/cookies.py                     # Set, read, and delete cookies via CDP
+uv run examples/network_logging.py             # Capture and inspect all network requests
+uv run examples/custom_headers_and_proxy.py    # Set custom HTTP headers and proxy config
+uv run examples/connect_to_existing_chrome.py  # Attach to already-running Chrome via ws_url
+uv run examples/concurrent_stress_test.py      # 30 tasks across 3 pools with interactive search
+uv run examples/debug_session.py               # Interactive step debugger (debug=True)
+uv run examples/httpx_vs_voidcrawl.py          # Compare plain HTTP vs JS-rendered scraping
+uv run examples/performance_modes.py           # Scale profiles and hardware-aware pool sizing
+uv run examples/docker_headless.py             # Docker headless with PoolConfig.from_docker()
 ```

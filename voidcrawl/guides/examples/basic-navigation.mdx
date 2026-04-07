@@ -15,7 +15,7 @@ from voidcrawl import BrowserPool, PoolConfig
 
 async def main() -> None:
     async with BrowserPool(PoolConfig()) as pool, pool.acquire() as tab:
-        await tab.navigate("https://example.com")
+        await tab.navigate("https://qscrape.dev")
         title = await tab.title()
         url = await tab.url()
         html = await tab.content()
@@ -40,7 +40,7 @@ if __name__ == "__main__":
 ## Expected Output
 
 ```
-Title: Example Domain
-URL:   https://example.com/
+Title: qScrape
+URL:   https://qscrape.dev/
 HTML length: 1256 chars
 ```

@@ -24,8 +24,8 @@ from voidcrawl import BrowserPool, PoolConfig
 async def main():
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
-            await tab.navigate("https://example.com")
-            print(await tab.title())   # "Example Domain"
+            await tab.navigate("https://qscrape.dev")
+            print(await tab.title())   # "qScrape"
             print(len(await tab.content()))
 
 asyncio.run(main())
@@ -47,8 +47,8 @@ from voidcrawl import BrowserConfig, BrowserSession
 
 async def main():
     async with BrowserSession(BrowserConfig()) as session:
-        page = await session.new_page("https://example.com")
-        print(await page.title())   # "Example Domain"
+        page = await session.new_page("https://qscrape.dev")
+        print(await page.title())   # "qScrape"
         print(len(await page.content()))
         await page.close()
 
