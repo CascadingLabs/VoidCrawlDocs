@@ -5,7 +5,7 @@ description: What async-native means for you, how Tokio and asyncio work togethe
 
 import AsyncLayerFigure from '../../../../src/components/AsyncLayerFigure.tsx';
 
-Every method in VoidCrawl is `async`. This isn't a convenience wrapper around synchronous code -- the entire stack, from Python down to the Rust CDP client, is built on async I/O.
+Every method in VoidCrawl is `async`. This isn't a convenience wrapper around synchronous code; the entire stack, from Python down to the Rust CDP client, is built on async I/O.
 
 ## What This Means for You
 
@@ -40,7 +40,7 @@ Every method in VoidCrawl is `async`. This isn't a convenience wrapper around sy
 
 ```python
 async with pool.acquire() as tab:
-    await tab.navigate("https://qscrape.dev")
+    await tab.goto("https://qscrape.dev")
     title = await tab.title()
     html = await tab.content()
 ```
@@ -50,7 +50,7 @@ async with pool.acquire() as tab:
 ```python
 async def fetch(pool, url):
     async with pool.acquire() as tab:
-        await tab.navigate(url)
+        await tab.goto(url)
         return await tab.content()
 
 results = await asyncio.gather(
@@ -64,14 +64,26 @@ results = await asyncio.gather(
 ```python
 import asyncio
 
+from voidcrawl import BrowserPool, PoolConfig
+
+urls = [
+    "https://qscrape.dev",
+    "https://qscrape.dev/l1",
+    "https://qscrape.dev/l2",
+]
+
+
 async def worker(pool, queue):
     while True:
         url = await queue.get()
-        async with pool.acquire() as tab:
-            await tab.navigate(url)
-            html = await tab.content()
-            print(f"{url}: {len(html)} chars")
-        queue.task_done()
+        try:
+            async with pool.acquire() as tab:
+                await tab.goto(url)
+                html = await tab.content()
+                print(f"{url}: {len(html)} chars")
+        finally:
+            queue.task_done()
+
 
 async def main():
     async with BrowserPool(PoolConfig(tabs_per_browser=4)) as pool:
@@ -83,6 +95,10 @@ async def main():
         await queue.join()
         for w in workers:
             w.cancel()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ## Common Mistakes

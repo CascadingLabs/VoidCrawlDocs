@@ -15,7 +15,7 @@ from voidcrawl import BrowserPool, PoolConfig
 
 async def main() -> None:
     async with BrowserPool(PoolConfig()) as pool, pool.acquire() as tab:
-        await tab.navigate("https://qscrape.dev")
+        await tab.goto("https://qscrape.dev")
         title = await tab.title()
         url = await tab.url()
         html = await tab.content()
@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
 1. `BrowserPool(PoolConfig())` creates a pool with default settings (1 browser, 4 tabs).
 2. `pool.acquire()` checks out a tab from the pool.
-3. `tab.navigate()` sends the browser to the URL.
+3. `tab.goto()` sends the browser to the URL and waits for network idle, returning a `PageResponse`. (If you want to drive the wait yourself, use `tab.navigate()` and pair it with `wait_for_navigation()` or a selector wait -- both are useful but not interchangeable.)
 4. `tab.title()`, `tab.url()`, and `tab.content()` read page state from the live DOM.
 5. When the `async with` block exits, the tab is released back to the pool for reuse.
 

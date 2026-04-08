@@ -24,7 +24,7 @@ from voidcrawl import BrowserPool, PoolConfig
 async def main():
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
-            await tab.navigate("https://qscrape.dev")
+            await tab.goto("https://qscrape.dev")
             print(await tab.title())   # "qScrape"
             print(len(await tab.content()))
 
@@ -84,7 +84,7 @@ from voidcrawl import BrowserPool, PoolConfig
 async def main():
     async with BrowserPool(PoolConfig()) as pool:
         async with pool.acquire() as tab:
-            await tab.navigate(
+            await tab.goto(
                 "https://qscrape.dev/l1/eshop/catalog/"
                 "?cat=Forge%20%26%20Smithing"
             )
@@ -120,6 +120,9 @@ asyncio.run(main())
 - Every method on `Page`, `PooledTab`, and `BrowserSession` is **async** -- always `await` them.
 - Both `BrowserPool` and `BrowserSession` are async context managers that ensure clean shutdown.
 - Stealth mode is **on by default**. Pass `stealth=False` to `BrowserConfig` to disable it.
+- `goto(url)` and `navigate(url)` are **both useful but not interchangeable**:
+  - `goto(url, timeout=30.0)` navigates **and waits for network idle**, returning a `PageResponse` (HTML, final URL, status, redirect flag). Use this when you want to read content immediately after -- it's the right default for most scraping.
+  - `navigate(url)` fires the navigation and returns immediately with `None`. Use it when you want to control the wait yourself (e.g. `await tab.wait_for_navigation()`, wait on a specific selector, or race multiple conditions). Reading `content()` right after `navigate()` without waiting may return an empty or partial page.
 
 ## Next Steps
 

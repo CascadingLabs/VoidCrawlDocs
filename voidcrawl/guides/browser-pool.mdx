@@ -40,7 +40,9 @@ config = PoolConfig(
 
 async with BrowserPool(config) as pool:
     async with pool.acquire() as tab:
-        await tab.navigate("https://qscrape.dev")
+        await tab.goto("https://qscrape.dev")
+
+...
 ```
 
 ### Via environment variables

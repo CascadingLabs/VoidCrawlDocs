@@ -21,7 +21,7 @@ docker run -d --network host --shm-size=2g \
   ghcr.io/cascadinglabs/voidcrawl:headless-latest
 ```
 
-Or via compose — set `VOIDCRAWL_IMAGE` in `docker/.env` (see `docker/.env.example`) and compose will pull instead of build:
+Or via compose, set `VOIDCRAWL_IMAGE` in `docker/.env` (see `docker/.env.example`) and compose will pull instead of build:
 
 ```bash
 VOIDCRAWL_IMAGE=ghcr.io/cascadinglabs/voidcrawl:headless-latest \
@@ -47,7 +47,7 @@ async def main():
     )
     async with BrowserPool(config) as pool:
         async with pool.acquire() as tab:
-            await tab.navigate("https://qscrape.dev")
+            await tab.goto("https://qscrape.dev")
             print(await tab.title())
 
 asyncio.run(main())
@@ -70,7 +70,7 @@ Docker bundles Sway<sup>[◑](#ref-3)</sup>, Chrome, and wayvnc<sup>[◇](#ref-4
 
 <DockerHeadfulFigure client:visible />
 
-Everything else — which GPU runtime to wire up, which shared memory size, which ports — is declared in `docker/docker-compose.headful.yml`. There's one compose profile per GPU vendor (`amd`, `intel`, `nvidia`, `cpu`), and all runtime knobs are `.env`-driven. The `run-headful.sh` wrapper is a tiny shell script that only does GPU auto-detection before handing off to `docker compose`; you can skip it entirely and invoke compose directly in CI.
+Everything else (which GPU runtime to wire up, which shared memory size, which ports) is declared in `docker/docker-compose.headful.yml`. There's one compose profile per GPU vendor (`amd`, `intel`, `nvidia`, `cpu`), and all runtime knobs are `.env`-driven. The `run-headful.sh` wrapper is a tiny shell script that only does GPU auto-detection before handing off to `docker compose`; you can skip it entirely and invoke compose directly in CI.
 
 ### Quick start
 
@@ -85,7 +85,7 @@ COMPOSE_PROFILES=nvidia docker compose -f docker/docker-compose.headful.yml up
 COMPOSE_PROFILES=cpu    docker compose -f docker/docker-compose.headful.yml up  # software rendering
 ```
 
-To pull the published image instead of building locally, set `VOIDCRAWL_IMAGE=ghcr.io/cascadinglabs/voidcrawl:headful-latest` in `docker/.env`. The headful image is `linux/amd64` only — it relies on Mesa/Sway userspace that doesn't cross-compile cleanly.
+To pull the published image instead of building locally, set `VOIDCRAWL_IMAGE=ghcr.io/cascadinglabs/voidcrawl:headful-latest` in `docker/.env`. The headful image is `linux/amd64` only; it relies on Mesa/Sway userspace that doesn't cross-compile cleanly.
 
 ### Connecting
 
@@ -112,7 +112,7 @@ async def main():
     async with BrowserPool(config) as pool:
         async with pool.acquire() as tab:
             # Watch this in VNC!
-            await tab.navigate("https://en.wikipedia.org/wiki/Web_scraping")
+            await tab.goto("https://en.wikipedia.org/wiki/Web_scraping")
             print(f"Title: {await tab.title()}")
 
 asyncio.run(main())
@@ -157,7 +157,7 @@ VNC_WIDTH=1280 VNC_HEIGHT=720 ./docker/run-headful.sh    # 720p (lower memory)
 | `ghcr.io/cascadinglabs/voidcrawl:headful-latest` | `linux/amd64` | Sway + wayvnc + GPU headful. Linux hosts only. |
 | `ghcr.io/cascadinglabs/voidcrawl:headless-<sha>` | multi-arch | Immutable per-commit tag. Pin this in production. |
 
-Every image is built with GHA layer caching and gated by [dive](https://github.com/wagoodman/dive) against `.github/dive-ci.yml` — builds that waste more than 50 MB or drop below 95 % efficiency fail CI before they're pushed.
+Every image is built with GHA layer caching and gated by [dive](https://github.com/wagoodman/dive) against `.github/dive-ci.yml`. Builds that waste more than 50 MB or drop below 95 % efficiency fail CI before they're pushed.
 
 ### GPU support
 

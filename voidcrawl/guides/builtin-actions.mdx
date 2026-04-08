@@ -18,7 +18,7 @@ Actions are classes you instantiate and `run()` against a tab or page:
 from voidcrawl.actions import ClickElement, GetText, SetInputValue
 
 async with pool.acquire() as tab:
-    await tab.navigate("https://qscrape.dev")
+    await tab.goto("https://qscrape.dev")  # waits for network idle
 
     # Each action is instantiated with parameters, then run against a tab
     await SetInputValue("#search", "hello").run(tab)
@@ -114,7 +114,7 @@ if not found:
 
 | Action | Parameters | Returns | Description |
 |--------|-----------|---------|-------------|
-| `InstallNetworkObserver` | — | `None` | Install a PerformanceObserver that records all network requests. Uses `buffered: true` to capture past entries. |
+| `InstallNetworkObserver` | *(none)* | `None` | Install a PerformanceObserver that records all network requests. Uses `buffered: true` to capture past entries. |
 | `CollectNetworkRequests` | `clear: bool` | `list[dict]` | Retrieve captured network entries (name, type, duration, size). |
 
 ```python
@@ -172,7 +172,7 @@ You don't always need the actions framework. `Page` and `PooledTab` have built-i
 
 ```python
 async with pool.acquire() as tab:
-    await tab.navigate(url)
+    await tab.goto(url)
 
     # DOM queries
     html = await tab.query_selector("#main")

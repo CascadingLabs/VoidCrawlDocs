@@ -1,12 +1,11 @@
 ---
-title: What the Hell is the DOM?
+title: HTML vs. the DOM
 description: HTML vs. the DOM, why it matters for scraping, and how browser automation tools handle it.
 ---
 
 import { Card } from '@astrojs/starlight/components';
 import HtmlDomFigure from '../../../../src/components/HtmlDomFigure.tsx';
 
-## HTML vs. the DOM
 
 When a server responds to an HTTP request, it sends back raw HTML -- a string of tags and text. When a browser receives that string, it parses it into a live tree of objects called the **DOM**<sup>[△](#ref-1)</sup> (Document Object Model). JavaScript can then modify that tree: adding nodes, removing them, rewriting text, injecting entire components.
 
@@ -40,8 +39,8 @@ VoidCrawl isn't the only browser automation tool. Here's how it fits in:
 | **Playwright**<sup>[○](#ref-2)</sup> | Node/Python/Java/.NET | CDP + custom | Apache-2.0 | Bundled browsers, high-level API |
 | **Selenium**<sup>[◑](#ref-3)</sup> | Java/Python/JS/etc | WebDriver | Apache-2.0 | Oldest, broadest browser support |
 | **Puppeteer**<sup>[◇](#ref-4)</sup> | Node.js | CDP | Apache-2.0 | Google-maintained, Chrome-only |
-| **zendriver**<sup>[★](#ref-5)</sup> | Python | CDP | MIT | Async, stealth-focused, undetected-chromedriver successor |
-| **nodriver**<sup>[⬡](#ref-6)</sup> | Python | CDP | MIT | zendriver predecessor |
+| **zendriver**<sup>[★](#ref-5)</sup> | Python | CDP | AGPL-3.0 | Async, stealth-focused, undetected-chromedriver successor |
+| **nodriver**<sup>[⬡](#ref-6)</sup> | Python | CDP | AGPL-3.0 | zendriver predecessor |
 | **undetected-chromedriver**<sup>[⬢](#ref-7)</sup> | Python | CDP | GPL-3.0 | Patched ChromeDriver to bypass detection |
 
 ### Why VoidCrawl exists
@@ -50,7 +49,7 @@ Playwright and Selenium are excellent general-purpose tools. But for high-volume
 
 - **Playwright** launches a new browser context per session. There's no built-in tab pooling or long-lived daemon mode.
 - **Selenium** uses the WebDriver protocol, which has higher overhead than CDP and doesn't support tab-level recycling.
-- **zendriver/nodriver** are async and stealth-focused (VoidCrawl's stealth approach is inspired by them), but are pure Python with no compiled core.
+- **zendriver/nodriver** are async and stealth-focused (VoidCrawl's stealth approach is inspired by them), but are pure Python with no compiled core. Also they have copy-left licenses.
 
 VoidCrawl's Rust core handles CDP I/O on a Tokio runtime. The `BrowserPool` keeps Chrome alive as a daemon and recycles tabs via a semaphore-bounded queue. The result: near-instant tab acquisition after warmup, with the stealth properties of zendriver.
 

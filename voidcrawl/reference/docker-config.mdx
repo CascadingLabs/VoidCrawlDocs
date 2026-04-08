@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 Reference for every environment variable, compose field, and runtime knob the VoidCrawl Docker images respond to. For a guided walkthrough see [Docker & VNC](/voidcrawl/guides/docker/); this page is the lookup table.
 
-A fully-annotated example file lives at [`docker/docker-compose.example.yaml`](https://github.com/cascadinglabs/voidcrawl/blob/main/docker/docker-compose.example.yaml) in the repo — it mirrors everything below as copy-pasteable YAML with inline commentary.
+A fully-annotated example file lives at [`docker/docker-compose.example.yaml`](https://github.com/cascadinglabs/voidcrawl/blob/main/docker/docker-compose.example.yaml) in the repo. It mirrors everything below as copy-pasteable YAML with inline commentary.
 
 ## Environment variables
 
@@ -15,7 +15,7 @@ A fully-annotated example file lives at [`docker/docker-compose.example.yaml`](h
 
 | Variable | Default | Applies to | Description |
 |----------|---------|------------|-------------|
-| `SCALE_PROFILE` | `balanced` | headless | Drives `voidcrawl.scale` — generates `supervisord.conf` at container start from host memory, CPU, and `ulimit -n`. One of `minimal` (1×2), `balanced` (2×4), `advanced` (4×8). Ignored when `CHROME_WS_URLS` is set. |
+| `SCALE_PROFILE` | `balanced` | headless | Drives `voidcrawl.scale`; generates `supervisord.conf` at container start from host memory, CPU, and `ulimit -n`. One of `minimal` (1×2), `balanced` (2×4), `advanced` (4×8). Ignored when `CHROME_WS_URLS` is set. |
 | `CHROME_WS_URLS` | *(computed)* | both | Comma-separated list of CDP endpoints (e.g. `http://localhost:9222,http://localhost:9223`). When set, bypasses scale computation and uses static supervisord config. Round-robined by the pool. |
 | `BROWSER_COUNT` | `2` | both | Number of Chrome processes supervisord launches. Must match the length of `CHROME_WS_URLS`. |
 | `TABS_PER_BROWSER` | `4` | both | Tabs acquired per browser. Drop to 2 for heavy SPAs; bump to 8 for lightweight scraping. |
@@ -25,7 +25,7 @@ A fully-annotated example file lives at [`docker/docker-compose.example.yaml`](h
 | Variable | Default | Applies to | Description |
 |----------|---------|------------|-------------|
 | `TAB_MAX_USES` | `50` | both | Hard-recycle a tab after this many acquisitions. Mitigates leaks in long-lived Chrome tabs. `0` disables (not recommended for runs longer than ~1h). |
-| `TAB_MAX_IDLE_SECS` | `60` | both | Idle eviction — torn down and recreated on next acquire. Balances memory vs. warm-up cost. |
+| `TAB_MAX_IDLE_SECS` | `60` | both | Idle eviction; torn down and recreated on next acquire. Balances memory vs. warm-up cost. |
 
 ### Chrome flags
 
@@ -48,7 +48,7 @@ The headless image hard-codes `9222` / `9223` in its supervisord config; overrid
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VNC_PORT` | `5900` | wayvnc bind port. RFB protocol — don't open in a browser. |
+| `VNC_PORT` | `5900` | wayvnc bind port. RFB protocol; don't open in a browser. |
 | `NOVNC_PORT` | `6080` | HTML5 noVNC client over HTTP. Open at `http://localhost:6080`. |
 | `VNC_WIDTH` | `1920` | Virtual display width. Also what Chrome reports as window size. Bumping to `2560` gives a more "real desktop" fingerprint for WAF evasion. |
 | `VNC_HEIGHT` | `1080` | Virtual display height. `720` saves ~150 MB of framebuffer RAM. |
@@ -60,7 +60,7 @@ Usually auto-configured by `entrypoint-headful.sh` based on the detected GPU. Ov
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WLR_RENDERER` | *(auto)* | wlroots renderer backend. `gles2` for AMD/Intel/NVIDIA (hardware), `pixman` for CPU fallback. |
-| `WLR_RENDERER_ALLOW_SOFTWARE` | *(auto)* | Set to `1` to allow software rendering when a GPU is present — useful when `/dev/dri` exists but the driver is broken. |
+| `WLR_RENDERER_ALLOW_SOFTWARE` | *(auto)* | Set to `1` to allow software rendering when a GPU is present; useful when `/dev/dri` exists but the driver is broken. |
 | `SWAY_EXTRA_ARGS` | *(auto)* | Extra args passed to `sway`. Entrypoint sets this to `--unsupported-gpu` for NVIDIA. |
 
 ### GPU profile selection (compose)
@@ -72,7 +72,7 @@ Usually auto-configured by `entrypoint-headful.sh` based on the detected GPU. Ov
 
 ## Compose-level fields
 
-These affect Docker itself, not VoidCrawl. They still matter — several are required for Chrome to work at all.
+These affect Docker itself, not VoidCrawl. They still matter; several are required for Chrome to work at all.
 
 ### Required
 
@@ -93,8 +93,8 @@ These affect Docker itself, not VoidCrawl. They still matter — several are req
 
 | Field | Value | Applies to |
 |-------|-------|------------|
-| `devices: [/dev/dri:/dev/dri]` | — | AMD, Intel, NVIDIA (all need the DRI render node). |
-| `deploy.resources.reservations.devices` with `driver: nvidia` | — | NVIDIA only. Requires `nvidia-container-toolkit` on the host and `nvidia-drm.modeset=1` kernel param. |
+| `devices: [/dev/dri:/dev/dri]` | *(n/a)* | AMD, Intel, NVIDIA (all need the DRI render node). |
+| `deploy.resources.reservations.devices` with `driver: nvidia` | *(n/a)* | NVIDIA only. Requires `nvidia-container-toolkit` on the host and `nvidia-drm.modeset=1` kernel param. |
 
 ### Resource limits (optional, recommended for production)
 
@@ -137,7 +137,7 @@ services:
 
 ## Full annotated example
 
-The canonical, exhaustively-commented example — including every variable above with inline commentary on defaults and trade-offs — is checked into the VoidCrawl repo:
+The canonical, exhaustively-commented example, including every variable above with inline commentary on defaults and trade-offs, is checked into the VoidCrawl repo:
 
 **[`docker/docker-compose.example.yaml`](https://github.com/cascadinglabs/voidcrawl/blob/main/docker/docker-compose.example.yaml)**
 

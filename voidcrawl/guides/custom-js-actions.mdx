@@ -36,7 +36,7 @@ return el.children.length;
 
 ```python
 async with pool.acquire() as tab:
-    await tab.navigate("https://qscrape.dev")
+    await tab.goto("https://qscrape.dev")
     count = await AppendToOutput("Hello!").run(tab)
     print(f"Children after append: {count}")
 ```

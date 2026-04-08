@@ -18,7 +18,7 @@ OUTPUT_DIR = Path("output")
 
 async def _capture() -> None:
     async with BrowserPool(PoolConfig()) as pool, pool.acquire() as tab:
-        await tab.navigate("https://qscrape.dev")
+        await tab.goto("https://qscrape.dev")
 
         # PNG screenshot
         png_bytes = await tab.screenshot_png()

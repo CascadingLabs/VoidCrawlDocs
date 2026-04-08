@@ -58,7 +58,7 @@ import JsonLd from '../../../src/components/JsonLd.astro';
 			name: "Can I use Yosoi without an LLM after the initial discovery?",
 			acceptedAnswer: {
 				"@type": "Answer",
-				text: "Yes. After the first run discovers and caches selectors, all subsequent scrapes use the cached selectors directly — no LLM calls, no cost.",
+				text: "Yes. After the first run discovers and caches selectors, all subsequent scrapes use the cached selectors directly, with no LLM calls and no cost.",
 			},
 		},
 	],
@@ -68,15 +68,15 @@ import JsonLd from '../../../src/components/JsonLd.astro';
 
 ## How VoidCrawl Powers Yosoi
 
-Yosoi relies on VoidCrawl as its browser automation backend. When a target page requires JavaScript rendering, VoidCrawl launches a headless browser via the Chrome DevTools Protocol [○](#ref-2), renders the page, and returns the fully hydrated DOM — giving Yosoi the complete markup it needs for accurate selector discovery.
+Yosoi relies on VoidCrawl as its browser automation backend. When a target page requires JavaScript rendering, VoidCrawl launches a headless browser via the Chrome DevTools Protocol [○](#ref-2), renders the page, and returns the fully hydrated DOM, giving Yosoi the complete markup it needs for accurate selector discovery.
 
 ## Key Features
 
-- **AI-powered selector discovery** — Point at a URL and describe what you want; Yosoi finds the CSS selectors.
-- **Selector caching** — Discover once, scrape forever without further LLM calls.
-- **Provider-agnostic** — Works with any LLM provider (OpenAI, Anthropic, local models).
-- **Contract-based extraction** — Define typed data contracts and let Yosoi fill them.
-- **Validation built in** — Verify extracted data matches expected types and shapes.
+- **AI-powered selector discovery**: Point at a URL and describe what you want; Yosoi finds the CSS selectors.
+- **Selector caching**: Discover once, scrape forever without further LLM calls.
+- **Provider-agnostic**: Works with any LLM provider (OpenAI, Anthropic, local models).
+- **Contract-based extraction**: Define typed data contracts and let Yosoi fill them.
+- **Validation built in**: Verify extracted data matches expected types and shapes.
 
 ## FAQs
 
@@ -104,7 +104,7 @@ Yes. Yosoi is provider-agnostic and works with OpenAI, Anthropic, local models, 
 <details>
 <summary>Can I use Yosoi without an LLM after the initial discovery?</summary>
 
-Yes. After the first run discovers and caches selectors, all subsequent scrapes use the cached selectors directly — no LLM calls, no cost.
+Yes. After the first run discovers and caches selectors, all subsequent scrapes use the cached selectors directly, with no LLM calls and no cost.
 
 </details>
 
