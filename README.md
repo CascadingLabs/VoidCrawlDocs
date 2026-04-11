@@ -17,6 +17,10 @@
 
 Source files for the [VoidCrawl](https://github.com/CascadingLabs/VoidCrawl) documentation, served at [cascadinglabs.com/voidcrawl](https://cascadinglabs.com/voidcrawl/).
 
+## Contact
+
+[contact@cascadinglabs.com](mailto:contact@cascadinglabs.com)
+
 ## License
 
 Apache-2.0
