@@ -76,14 +76,14 @@ VoidCrawl's `tab.content()` returns the live DOM -- equivalent to what Inspect s
 <details>
 <summary>Can VoidCrawl handle single-page apps (SPAs)?</summary>
 
-Yes. VoidCrawl runs a real Chrome instance that executes JavaScript and builds the full DOM. SPAs render normally. Use `wait_for_stable_dom()` to ensure the page has finished rendering before extracting content.
+Yes. VoidCrawl runs a real Chrome instance that executes JavaScript and builds the full DOM. SPAs render normally. Use `wait_for_network_idle()` -- or, more reliably for SPAs, `wait_for_selector("<the element you care about>")` -- to ensure the page has finished rendering before extracting content.
 
 </details>
 
 <details>
 <summary>What about shadow DOM components?</summary>
 
-VoidCrawl's stealth layer forces all `attachShadow` calls to use `mode: 'open'`, making shadow DOM content accessible to automation. This also enables interaction with WAF challenges like Cloudflare Turnstile.
+VoidCrawl does **not** tamper with shadow DOM. It used to force all `attachShadow` calls to `mode: 'open'`, but that broke Cloudflare Turnstile (which renders its challenge in a *closed* shadow root and tamper-checks it -- forcing it open failed with `ERROR 600010`), so the patch was removed. You can still drive a challenge widget regardless of shadow mode via `click_visual_coords` (real compositor clicks at pixel coordinates). See [Stealth](/voidcrawl/guides/stealth/).
 
 </details>
 

@@ -1,0 +1,166 @@
+---
+title: Geolocation & Emulation
+description: Override a page's geolocation, locale, and timezone per tab via the CDP Emulation domain to test region-aware content.
+faqs:
+  - q: Does set_geolocation work on any page?
+    a: >-
+      navigator.geolocation reads require a secure context, so https:// pages or
+      localhost, not data: URLs. The override is applied at the CDP layer and the
+      geolocation permission is granted for you, but the page must still call
+      navigator.geolocation.getCurrentPosition for the spoofed coordinates to surface.
+  - q: I set a New York geolocation but Google Maps still shows my real city. Why?
+    a: >-
+      Many "near me" services geolocate from your request IP and Accept-Language
+      header, not the browser geolocation API. set_geolocation only moves the
+      navigator.geolocation reading. To shift IP-driven results you also need
+      set_locale, and often a proxy that exits in the target region.
+  - q: What format does set_timezone expect?
+    a: >-
+      An IANA time zone id such as America/New_York or Europe/Paris, not a UTC offset.
+      It overrides Date and Intl for the tab, so any server probe that reads the
+      rendered clock sees the spoofed zone.
+  - q: Do these overrides survive tab recycling in the pool?
+    a: >-
+      No. Overrides are per-tab CDP state. When the pool recycles a tab back to
+      about:blank the emulation persists on that tab object, but a fresh acquire may
+      hand you a different tab. Re-apply the overrides after each acquire if you need
+      them deterministic.
+references:
+  - title: CDP Emulation domain
+    url: https://chromedevtools.github.io/devtools-protocol/tot/Emulation/
+  - title: W3C Geolocation API
+    url: https://www.w3.org/TR/geolocation/
+  - title: IANA Time Zone Database
+    url: https://www.iana.org/time-zones
+  - title: BCP 47 language tags
+    url: https://www.rfc-editor.org/info/bcp47
+---
+
+import { Aside, Card } from '@astrojs/starlight/components';
+
+A page reveals where it thinks you are through three independent signals: the geolocation API, the JS locale plus `Accept-Language` header, and the timezone. VoidCrawl can override all three per tab through Chrome's [CDP Emulation domain](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/)<sup>[△](#ref-1)</sup>, so the same browser can present as a visitor in New York, Paris, or Tokyo without a proxy.
+
+These are low-level `Page` / `PooledTab` methods. They are part of the Python SDK and the Rust core, not the MCP tool surface.
+
+## The three levers
+
+| Method | CDP call | What shifts |
+|---|---|---|
+| `set_geolocation(lat, lon, accuracy=None)` | `Emulation.setGeolocationOverride` | `navigator.geolocation.getCurrentPosition` |
+| `set_locale(locale)` | `Emulation.setLocaleOverride` | `Intl`, `navigator.language`, `Accept-Language` |
+| `set_timezone(timezone_id)` | `Emulation.setTimezoneOverride` | `Date`, `Intl.DateTimeFormat().resolvedOptions().timeZone` |
+
+## Geolocation
+
+`set_geolocation` takes latitude and longitude, with an optional `accuracy` in metres that defaults to `50`. VoidCrawl grants the [geolocation permission](https://www.w3.org/TR/geolocation/)<sup>[○](#ref-2)</sup> for you first, because headless Chrome auto-denies `navigator.geolocation` otherwise and the override would never be read.
+
+```python
+import asyncio
+from voidcrawl import BrowserConfig, BrowserSession
+
+async def main() -> None:
+    async with BrowserSession(BrowserConfig()) as browser:
+        page = await browser.new_page("https://example.com")  # secure context
+        await page.set_geolocation(40.758, -73.9855)  # Times Square
+
+        coords = await page.eval_js(
+            "new Promise(r => navigator.geolocation.getCurrentPosition("
+            "p => r([p.coords.latitude, p.coords.longitude])))"
+        )
+        print(coords)  # [40.758, -73.9855]
+        await page.close()
+
+asyncio.run(main())
+```
+
+<Aside type="caution">
+`navigator.geolocation` only resolves in a **secure context** (https:// or localhost), never a `data:` URL. If you are spoofing geolocation against a local fixture, serve it over `localhost`.
+</Aside>
+
+## Locale
+
+`set_locale` takes a [BCP 47](https://www.rfc-editor.org/info/bcp47)<sup>[◇](#ref-4)</sup> tag such as `"fr-FR"`. It drives both `Intl` resolution and the `Accept-Language` request header, which is the lever that actually shifts region-aware content like localized pricing or Google Maps results.
+
+```python
+await page.set_locale("fr-FR")
+lang = await page.eval_js("Intl.DateTimeFormat().resolvedOptions().locale")
+print(lang)  # "fr-FR"
+```
+
+## Timezone
+
+`set_timezone` takes an [IANA time zone id](https://www.iana.org/time-zones)<sup>[◑](#ref-3)</sup> like `"America/New_York"`, not a UTC offset. It rewrites `Date` and `Intl` for the tab, so any server-side probe that reads the rendered clock sees the spoofed zone.
+
+```python
+await page.set_timezone("America/New_York")
+tz = await page.eval_js("Intl.DateTimeFormat().resolvedOptions().timeZone")
+print(tz)  # "America/New_York"
+```
+
+## Teleporting a tab
+
+Region-aware sites cross-check signals, so a believable visitor sets all three together. Apply them before navigating to the target so the first request already carries the right `Accept-Language`.
+
+```python
+async def teleport(page, lat, lon, locale, tz):
+    await page.set_locale(locale)
+    await page.set_timezone(tz)
+    await page.set_geolocation(lat, lon)
+
+# Present as a visitor in Paris
+await teleport(page, 48.8566, 2.3522, "fr-FR", "Europe/Paris")
+await page.goto("https://your-target.example")
+```
+
+<Aside type="note">
+Geolocation and IP geolocation are different signals. Store locators that read `navigator.geolocation` follow `set_geolocation`. Services that geolocate from the request IP and `Accept-Language` (much of Google Maps, for example) follow `set_locale` and the exit IP more than the coordinates. To shift those, pair locale emulation with a proxy that exits in the target region.
+</Aside>
+
+## When per-tab state resets
+
+Overrides are per-tab CDP state. In the pool, a recycled tab keeps whatever emulation it last held, but a fresh `acquire()` may hand you a different tab. If you need deterministic geo per scrape, re-apply the overrides right after each acquire, or use a dedicated `BrowserSession` per region to keep cookie jars isolated as well.
+
+## Examples
+
+- [`examples/geolocation_teleport.py`](https://github.com/CascadingLabs/VoidCrawl/blob/main/examples/geolocation_teleport.py) -- move one browser through four cities and verify the spoof three ways.
+- [`examples/geolocation_pizza_search.py`](https://github.com/CascadingLabs/VoidCrawl/blob/main/examples/geolocation_pizza_search.py) -- run a "pizza near me" query per city with isolated cookie jars.
+
+## FAQs
+
+<details>
+<summary>Does set_geolocation work on any page?</summary>
+
+`navigator.geolocation` reads require a **secure context**, so `https://` pages or `localhost`, not `data:` URLs. The override is applied at the CDP layer and the geolocation permission is granted for you, but the page must still call `navigator.geolocation.getCurrentPosition` for the spoofed coordinates to surface.
+
+</details>
+
+<details>
+<summary>I set a New York geolocation but Google Maps still shows my real city. Why?</summary>
+
+Many "near me" services geolocate from your request IP and `Accept-Language` header, not the browser geolocation API. `set_geolocation` only moves the `navigator.geolocation` reading. To shift IP-driven results you also need `set_locale`, and often a proxy that exits in the target region.
+
+</details>
+
+<details>
+<summary>What format does set_timezone expect?</summary>
+
+An IANA time zone id such as `America/New_York` or `Europe/Paris`, not a UTC offset. It overrides `Date` and `Intl` for the tab, so any server probe that reads the rendered clock sees the spoofed zone.
+
+</details>
+
+<details>
+<summary>Do these overrides survive tab recycling in the pool?</summary>
+
+No. Overrides are per-tab CDP state. When the pool recycles a tab back to `about:blank` the emulation persists on that tab object, but a fresh `acquire()` may hand you a different tab. Re-apply the overrides after each acquire if you need them deterministic.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **CDP Emulation domain**. Chrome DevTools Protocol. *Reference for setGeolocationOverride, setLocaleOverride, and setTimezoneOverride.* https://chromedevtools.github.io/devtools-protocol/tot/Emulation/
+
+<a id="ref-2"></a>○ **Geolocation API**. W3C. *Specification for navigator.geolocation and secure-context requirements.* https://www.w3.org/TR/geolocation/
+
+<a id="ref-3"></a>◑ **Time Zone Database**. IANA. *Canonical list of time zone ids accepted by setTimezoneOverride.* https://www.iana.org/time-zones
+
+<a id="ref-4"></a>◇ **BCP 47**. IETF. *Tags for identifying languages, the format set_locale expects.* https://www.rfc-editor.org/info/bcp47

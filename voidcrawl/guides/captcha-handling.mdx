@@ -1,0 +1,202 @@
+---
+title: Captcha Handling
+description: VoidCrawl surfaces bot walls as typed exceptions. It never solves them, so you rotate instead.
+faqs:
+  - q: Does VoidCrawl solve captchas?
+    a: >-
+      No, and it will not. VoidCrawl's philosophy is "surface, do not solve". When a page
+      trips a bot wall, VoidCrawl raises `CaptchaDetected` with enough context for your
+      pipeline to rotate, back off, or escalate to a human. It never clicks checkboxes,
+      submits tokens, or calls third-party solving services.
+  - q: Which captcha providers does VoidCrawl detect?
+    a: >-
+      As of 0.3.0, VoidCrawl detects Google reCAPTCHA (v2 and v3), hCaptcha, Cloudflare
+      Turnstile, and Cloudflare interstitial challenges. Detection is DOM-only and
+      deliberately conservative. False positives are worse than false negatives when
+      the response is to rotate the upstream.
+  - q: What DOM signals does VoidCrawl use for detection?
+    a: >-
+      reCAPTCHA uses iframe[src*="recaptcha"] and .g-recaptcha. hCaptcha uses
+      iframe[src*="hcaptcha"] and .h-captcha. Turnstile uses
+      iframe[src*="challenges.cloudflare.com"] and .cf-turnstile. Cloudflare
+      interstitials use #cf-challenge and a page title containing "Just a moment".
+  - q: Does VoidCrawl detect canvas-only (visual) captchas?
+    a: >-
+      No. 0.3.0 is DOM-only. A captcha rendered purely to canvas with no DOM fingerprint
+      is not detected. Opt-in visual detection is tracked for 0.4.
+  - q: How do I catch CaptchaDetected in Python?
+    a: >-
+      Call goto(url, fail_on_captcha=True) and wrap it in a try/except CaptchaDetected
+      block. Without the flag, goto returns normally (silent behaviour is preserved for
+      0.2.x compatibility), and you can detect manually via content() or a selector probe.
+  - q: How does the MCP server report captchas?
+    a: >-
+      Every tool call that hits a captcha returns an MCP error with code -32001, a
+      human-readable message, and a structured data envelope with exception set to
+      CaptchaDetected and kind set to the provider name. Agent middleware dispatches on
+      data.exception without string-matching the message.
+  - q: What should my pipeline do when it sees CaptchaDetected?
+    a: >-
+      Rotate. Options, in order of typical preference, are to lease a different warm
+      profile, switch to a new proxy, back off and retry later, or mark the URL as
+      uncrawlable and move on. VoidCrawl is the detector, not the recovery mechanism.
+references:
+  - title: Google reCAPTCHA documentation
+    url: https://developers.google.com/recaptcha
+  - title: hCaptcha documentation
+    url: https://docs.hcaptcha.com/
+  - title: Cloudflare Turnstile documentation
+    url: https://developers.cloudflare.com/turnstile/
+  - title: VoidCrawl repository
+    url: https://github.com/CascadingLabs/VoidCrawl
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+VoidCrawl takes a hard line on captchas: **surface, do not solve**. When a page trips a bot wall, VoidCrawl raises a typed exception with enough context for your pipeline to rotate, back off, or escalate to a human. It does not click checkboxes, submit tokens, or call third-party solving services.
+
+This keeps the library safe, predictable, and on the right side of every major service's terms of use.
+
+## What gets detected
+
+As of 0.3.0, VoidCrawl probes the DOM for known markers. Detection is best-effort and deliberately conservative. False positives are worse than false negatives when the remediation is "rotate the upstream".
+
+| Provider | DOM signal |
+|---|---|
+| Google reCAPTCHA | `iframe[src*="recaptcha"]`, `.g-recaptcha` |
+| hCaptcha | `iframe[src*="hcaptcha"]`, `.h-captcha` |
+| Cloudflare Turnstile | `iframe[src*="challenges.cloudflare.com"]`, `.cf-turnstile` |
+| Cloudflare interstitial | `#cf-challenge`, title contains "Just a moment" |
+
+<Aside type="note">
+Visual-only challenges (a captcha rendered purely to canvas with no DOM fingerprint) are **not** detected in 0.3.0. If you need coverage for those, open an issue and attach the offending URL. 0.4 hopes to add opt-in visual detection.
+</Aside>
+
+## Catching it in Python
+
+```python
+from voidcrawl import BrowserPool, PoolConfig
+from voidcrawl.profiles import CaptchaDetected
+
+async with BrowserPool(PoolConfig()) as pool, pool.acquire() as tab:
+    try:
+        await tab.goto("https://example.com/gated-page", fail_on_captcha=True)
+        html = await tab.content()
+    except CaptchaDetected as e:
+        # e.args[0] -> "captcha detected: recaptcha"
+        # Rotate the upstream (new proxy, new profile) and retry upstream.
+        raise
+```
+
+The `fail_on_captcha=True` flag is opt-in. Existing 0.2.x callers keep the silent-pass behaviour. Without the flag, `goto` returns normally and you can detect manually via `content()` or a selector probe.
+
+## Catching it over MCP
+
+MCP tool errors include a structured `data` envelope so your agent can dispatch without string-matching messages:
+
+```json
+{
+  "code": -32001,
+  "message": "captcha detected: turnstile",
+  "data": {
+    "exception": "CaptchaDetected",
+    "kind": "turnstile"
+  }
+}
+```
+
+In a Claude Code skill file, the idiomatic recipe is:
+
+1. `navigate` the URL.
+2. If the response carries `data.exception === "CaptchaDetected"`, do **not** re-hit the same URL on the same fingerprint.
+3. **Change something before retrying** -- go headful first (see below), then a cleaner IP. Don't just stop: managed Turnstile often passes once headful.
+
+## Passing managed Turnstile (headful)
+
+Detecting a captcha is not the same as failing it. **Cloudflare Turnstile in _managed_ mode** -- the most common embed -- scores the browser and, for a sufficiently real one, issues a token with **no interaction**. VoidCrawl's hardened fingerprint (hardware GPU, consistent UA/Client-Hints, no JS injection -- see [Stealth](/voidcrawl/guides/stealth/)) clears it **when headful**:
+
+| Mode | Managed Turnstile |
+|------|-------------------|
+| Headful | Passes non-interactively (verified server-side: `siteverify success:true, interactive:false`) |
+| Headless | Gated -- stalls at `before-interactive`, no token |
+
+So the first move on a Turnstile wall is **go headful** (`CHROME_HEADLESS=0`, or the [headful Docker container](/voidcrawl/guides/docker/)) -- not rotate. This is *pass, don't solve*: Cloudflare issues the token to a browser it scores as human; VoidCrawl never forges or auto-submits one.
+
+A site can also gate its *results* behind a login/account wall **after** Turnstile passes (e.g. "sign in to view"). That's an auth gate, not bot detection -- passing Turnstile doesn't bypass it.
+
+## Rotation strategies
+
+When headful still doesn't clear the wall, the lever is usually IP reputation -- a flagged or datacenter IP gets challenged even with a clean, headful browser. Your pipeline picks the response:
+
+- **New IP.** Swap to a residential/different proxy in `BrowserConfig.proxy` -- the biggest lever once the fingerprint is clean.
+- **New profile.** Lease a different warm profile via [`with_profile`](/voidcrawl/guides/profiles/). (A warm profile's `cf_clearance` helps with the Cloudflare *edge* gate, not an inline managed-Turnstile widget.)
+- **Back off.** Sleep and retry later. Some walls are rate-based and clear on their own.
+- **Abort.** Record the URL as uncrawlable and move on.
+
+What VoidCrawl **will not do**: feed images to an OCR service, solve reCAPTCHA puzzles, or forge/inject Turnstile tokens. A managed Turnstile that issues its *own* token to a real-enough browser is a pass, not solving (above) -- but VoidCrawl never fabricates one.
+
+## FAQs
+
+<details>
+<summary>Does VoidCrawl solve captchas?</summary>
+
+No, and it will not. VoidCrawl's philosophy is "surface, do not solve". When a page trips a bot wall, VoidCrawl raises `CaptchaDetected` with enough context for your pipeline to rotate, back off, or escalate to a human. It never clicks checkboxes, submits tokens, or calls third-party solving services.
+
+</details>
+
+<details>
+<summary>Which captcha providers does VoidCrawl detect?</summary>
+
+As of 0.3.0, VoidCrawl detects Google reCAPTCHA (v2 and v3), hCaptcha, Cloudflare Turnstile, and Cloudflare interstitial challenges. Detection is DOM-only and deliberately conservative.
+
+</details>
+
+<details>
+<summary>What DOM signals does VoidCrawl use for detection?</summary>
+
+See the table above for the exact selectors per provider.
+
+</details>
+
+<details>
+<summary>Does VoidCrawl detect canvas-only (visual) captchas?</summary>
+
+No. 0.3.0 is DOM-only. A captcha rendered purely to canvas with no DOM fingerprint is not detected. Opt-in visual detection is tracked for 0.4.
+
+</details>
+
+<details>
+<summary>How do I catch CaptchaDetected in Python?</summary>
+
+Call `goto(url, fail_on_captcha=True)` and wrap it in `try: ... except CaptchaDetected: ...`. Without the flag, `goto` returns normally (silent behaviour is preserved for 0.2.x compatibility), and you can detect manually via `content()` or a selector probe.
+
+</details>
+
+<details>
+<summary>How does the MCP server report captchas?</summary>
+
+Every tool call that hits a captcha returns an MCP error with code `-32001`, a human-readable message, and a structured `data` envelope: `{ "exception": "CaptchaDetected", "kind": "recaptcha" }`. Agent middleware dispatches on `data.exception` without string-matching the message.
+
+</details>
+
+<details>
+<summary>What should my pipeline do when it sees CaptchaDetected?</summary>
+
+Rotate. Options, in order of typical preference: lease a different warm profile, switch to a new proxy, back off and retry later, or mark the URL as uncrawlable and move on. VoidCrawl is the detector, not the recovery mechanism.
+
+</details>
+
+## Related
+
+- [MCP server: typed errors](/voidcrawl/guides/mcp-server/#typed-errors)
+- [Stealth Mode](/voidcrawl/guides/stealth/). The first line of defence: preventing detection is always cheaper than recovering from it.
+
+## References
+
+△ **reCAPTCHA**. Google. *Developer documentation for Google's reCAPTCHA v2 and v3.* https://developers.google.com/recaptcha
+
+○ **hCaptcha**. Intuition Machines. *Official hCaptcha integration documentation.* https://docs.hcaptcha.com/
+
+◑ **Turnstile**. Cloudflare. *Documentation for Cloudflare's privacy-first captcha alternative.* https://developers.cloudflare.com/turnstile/
+
+◐ **VoidCrawl**. CascadingLabs. *VoidCrawl source repository on GitHub.* https://github.com/CascadingLabs/VoidCrawl

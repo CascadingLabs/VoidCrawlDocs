@@ -1,25 +1,49 @@
 ---
 title: Stealth Mode
-description: How VoidCrawl avoids bot detection with minimal-footprint anti-detection patches.
+description: How VoidCrawl avoids bot detection -- clean launch flags, a consistent real browser, hardware GPU, and zero JS injection.
 ---
 
 import { Card } from '@astrojs/starlight/components';
 
-VoidCrawl uses a **minimal-footprint** stealth strategy inspired by undetected-chromedriver<sup>[◑](#ref-3)</sup>, zendriver<sup>[△](#ref-1)</sup>, and nodriver<sup>[○](#ref-2)</sup>. Stealth is **enabled by default**.
+VoidCrawl uses a **minimal-footprint** stealth strategy inspired by undetected-chromedriver<sup>[◑](#ref-3)</sup>, zendriver<sup>[△](#ref-1)</sup>, and nodriver<sup>[○](#ref-2)</sup>. Stealth is **enabled by default**. The guiding rule: *present a real browser consistently -- don't fake things.*
 
-## Philosophy: Less Is More
+## At a glance
+
+| Layer | What VoidCrawl does | Why |
+|-------|--------------------|-----|
+| **Launch flags** | Drop chromiumoxide's `--enable-automation` / `--disable-extensions`; add `--disable-blink-features=AutomationControlled` + zendriver flags | The automation signal is in the flags, not JS. `AutomationControlled` makes `navigator.webdriver` a native **`false`** -- we do not patch it in JS. |
+| **No JS injection** | `addScriptToEvaluateOnNewDocument` is **empty** | Every injected script is itself a fingerprint. We patch nothing in page-world JS. |
+| **UA / Client Hints** | Real UA (any `Headless` token stripped), with `navigator.platform` + `userAgentData` derived from that UA so they agree | A Linux UA with `platform === "Win32"`, or empty `brands`, is a bot tell. |
+| **GPU** | `--headless=new` + ANGLE + `--disable-gpu-sandbox` -> **hardware** WebGL | Legacy headless renders WebGL with **SwiftShader** (software) -- a strong bot signal. |
+
+Against **managed Cloudflare Turnstile** (the hard case): **headful passes** non-interactively (verified server-side, `siteverify success:true, interactive:false`); **headless is still gated**. Every default below is **overridable** -- see [Overriding the defaults](#overriding-the-defaults).
+
+## Philosophy: less is more
 
 Most browser automation tools try to _spoof_ every fingerprint signal -- fake plugins, fake WebGL, fake user-agent strings. This backfires against modern WAFs (Akamai, Cloudflare, PerimeterX) because:
 
-1. **Spoofed values are inconsistent.** A hardcoded `Chrome/131` user-agent on a system running Chromium 146 is an instant flag.
+1. **Spoofed values are inconsistent.** A hardcoded `Chrome/131` user-agent on a system running Chromium 148 is an instant flag. A fake WebGL renderer that doesn't match the real GPU is trivially detected.
 
 2. **The spoofing itself is detectable.** Each `Page.addScriptToEvaluateOnNewDocument` CDP call is a fingerprint. Overriding `navigator.plugins` with a Proxy/getter behaves differently from the real `PluginArray` prototype.
 
 3. **The automation signal isn't in JS -- it's in Chrome's launch flags.** chromiumoxide's default flags include `--enable-automation`, which tells every WAF "I'm automated" before any page loads.
 
-VoidCrawl's approach: **don't fake anything** except the one property Chrome explicitly sets for automation (`navigator.webdriver`). Instead, launch Chrome with clean flags that don't advertise automation.
+VoidCrawl's approach: **don't fake anything.** Launch with clean flags, let Chrome report its real values, and only ensure those values are *internally consistent*.
 
-## What Changed from chromiumoxide Defaults
+<Card title="Lesson learned the hard way">
+
+VoidCrawl used to inject two JS patches -- and both were **removed** because they *hurt*:
+
+- **Deleting `navigator.webdriver`** made it `undefined`. Real Chrome reports `false`; `undefined` is itself the tell.
+- **Force-opening shadow DOMs** broke **Cloudflare Turnstile**, which renders its challenge in a *closed* shadow root and tamper-checks it. Forcing it open failed the challenge with `ERROR 600010`.
+
+VoidCrawl injects **zero** page-world JS today.
+
+</Card>
+
+## The automation signal is in the launch flags
+
+After `disable_default_args()` (which strips chromiumoxide's toxic defaults) VoidCrawl re-adds a curated set.
 
 ### Removed (toxic flags)
 
@@ -27,102 +51,128 @@ VoidCrawl's approach: **don't fake anything** except the one property Chrome exp
 |------|-------------|
 | `--enable-automation` | Literally opts in to automation detection |
 | `--disable-extensions` | Normal Chrome always has extensions support |
-| `--enable-blink-features=IdleDetection` | Unusual feature that fingerprints automation |
 
 ### Added (zendriver flags)
 
 | Flag | Purpose |
 |------|---------|
-| `--disable-blink-features=AutomationControlled` | Removes Chrome's automation-controlled blink feature |
-| `--disable-features=IsolateOrigins,site-per-process` | Disables site isolation used for fingerprinting |
-| `--no-pings` | Suppresses background pings |
-| `--disable-component-update` | Prevents background update checks |
-| `--homepage=about:blank` | Clean startup page |
+| `--disable-blink-features=AutomationControlled` | Removes the automation-controlled blink feature -> `navigator.webdriver` is a native `false` |
+| `--disable-features=IsolateOrigins,site-per-process,TranslateUI` | Disables isolation/UI signals WAFs fingerprint on |
+| `--no-pings`, `--disable-component-update`, `--disable-session-crashed-bubble`, `--disable-search-engine-choice-screen`, `--homepage=about:blank` | Suppress automation-ish background behavior and UI |
 
-## What the JS Stealth Layer Does
+Plus the safe noise-reducers (`--disable-background-networking`, `--disable-breakpad`, `--disable-dev-shm-usage`, `--no-first-run`, ...).
 
-Only two patches are injected via `addScriptToEvaluateOnNewDocument`:
+## UA / platform / Client-Hints consistency
 
-### 1. `navigator.webdriver` Removal
+The only override VoidCrawl applies is via CDP `Emulation.setUserAgentOverride` (not page-world JS). It probes the browser's **real** UA, strips any `Headless` token, and derives a coherent identity from that one string so UA, `navigator.platform`, and `navigator.userAgentData` all agree:
 
-Chrome explicitly sets `navigator.webdriver = true` when connected via CDP. VoidCrawl deletes it:
+| Signal | Value (for a real Linux/Chrome UA) |
+|--------|-------------------------------------|
+| `navigator.userAgent` | real build, `HeadlessChrome` -> `Chrome` |
+| `navigator.platform` | `Linux x86_64` (`Win32` / `MacIntel` for those UAs) |
+| `Sec-CH-UA-Platform` | `Linux` / `Windows` / `macOS` |
+| `userAgentData.brands` / `fullVersionList` | `Chromium` / `Google Chrome` at the UA's version + a GREASE entry |
 
-```javascript
-delete Object.getPrototypeOf(navigator).webdriver;
-Object.defineProperty(navigator, 'webdriver', {
-    get: () => undefined,
-    configurable: true,
-});
-```
+A mismatch here -- e.g. a hardcoded `platform: "Win32"` on a Linux UA, or empty `brands` -- is itself a bot signal. Both are flagged by the rebrowser bot-detector<sup>[▢](#ref-4)</sup>, and now pass clean.
 
-### 2. Force-Open Shadow DOMs
+## GPU acceleration (hardware WebGL)
 
-Cloudflare Turnstile and similar WAF challenges render inside closed shadow roots. VoidCrawl forces all `attachShadow` calls to use `mode: 'open'`:
+A headless browser that renders WebGL with **SwiftShader** (Chrome's software fallback) advertises itself: `WEBGL_debug_renderer_info` returns `"ANGLE (... SwiftShader ...)"`, which Cloudflare and others weigh as "no real GPU -> likely a bot/VM."
 
-```javascript
-Element.prototype._attachShadow = Element.prototype.attachShadow;
-Element.prototype.attachShadow = function(init) {
-    return this._attachShadow({ ...init, mode: 'open' });
-};
-```
+VoidCrawl forces **hardware** rendering:
 
-### What We Don't Patch (and why)
+- **`--headless=new`** -- the legacy `--headless` forces SwiftShader; the new mode runs the full browser stack and can use a real GPU.
+- **`--use-angle=vulkan` + `--enable-gpu` + `--ignore-gpu-blocklist`** -- route WebGL through ANGLE on the real GPU.
+- **`--disable-gpu-sandbox`** -- lets the GPU process reach the DRM render node. *This is the lever* -- on a host with a working driver it's usually all you need.
 
-| Signal | Why we leave it alone |
-|--------|----------------------|
-| `navigator.plugins` | Real Chrome already populates this. Faking it creates detectable inconsistencies. |
-| `navigator.userAgent` | We use Chrome's real UA. Hardcoding a version creates a mismatch. |
-| WebGL vendor/renderer | The real GPU info is more convincing than any fake string. |
-| `window.chrome.runtime` | Real Chrome already has this. |
-| Canvas fingerprint | Can't be spoofed reliably without introducing detectable noise. |
+The defaults are **vendor-generic**: ANGLE uses whatever Intel/AMD/NVIDIA driver the machine has. Verified on AMD, the renderer becomes `ANGLE (AMD, Vulkan ... RADV ...), radv)` -- hardware, not SwiftShader.
 
-## Headful vs Headless
+<Card title="GPU in Docker">
 
-<Card title="WAF-protected sites require headful mode">
-
-Headless Chrome has fundamental differences that sophisticated WAFs detect regardless of JS patches:
-
-- Different rendering pipeline (no compositing)
-- Missing screen/display properties
-- HTTP/2 TLS fingerprint differences
-
-For Akamai, Cloudflare, and similar WAFs, use headful mode via [Docker & VNC](/voidcrawl/guides/docker/).
+Inside a container, hardware GPU also needs Mesa drivers in the image **and** `/dev/dri` passthrough -- see [Docker](/voidcrawl/guides/docker/). Without a GPU passed through, the container falls back to SwiftShader. NVIDIA needs the `nvidia-container-toolkit` instead of `/dev/dri`.
 
 </Card>
+
+## What VoidCrawl does not touch
+
+It injects **no** page-world JS, and leaves these alone:
+
+| Signal | Why |
+|--------|-----|
+| `navigator.webdriver` | The launch flag already yields a native `false`. A JS patch (delete -> `undefined`, or a redefined getter) is itself detectable. |
+| `navigator.plugins` | Real Chrome populates it; faking creates inconsistencies. |
+| `navigator.userAgent` | Real UA (Headless stripped) -- no version mismatch. |
+| WebGL vendor/renderer | The real (hardware) GPU string beats any fake. |
+| `window.chrome.runtime`, `navigator.permissions`, canvas | Default behavior is already correct; spoofing adds detectable noise. |
+| Shadow DOM mode | We do **not** force-open it (it broke Turnstile). Clicking a challenge widget works via real compositor clicks at pixel coordinates regardless of shadow mode. |
+
+## Headful vs headless (and managed Turnstile)
+
+<Card title="WAF and managed-Turnstile targets require headful mode">
+
+Headless Chrome has fundamental differences sophisticated WAFs detect regardless of any patch:
+
+- Different rendering/compositing pipeline.
+- Missing / non-default screen, media, and input properties.
+- A lower managed-challenge score.
+
+For Akamai, Cloudflare managed Turnstile, and similar, use headful via [Docker & VNC](/voidcrawl/guides/docker/).
+
+</Card>
+
+Verified against **managed Cloudflare Turnstile** with a real sitekey (server-side `siteverify`):
+
+| Mode | Outcome |
+|------|---------|
+| Headful | **Pass**, non-interactive (`success:true, interactive:false`) |
+| Headless | Stalls at `before-interactive`; no token |
 
 ```python
 from voidcrawl import BrowserConfig, BrowserPool, PoolConfig
 
-# For WAF-protected sites -- use headful
-config = PoolConfig(
-    browser=BrowserConfig(headless=False),
-)
+# WAF / managed-Turnstile targets -- use headful
+config = PoolConfig(browser=BrowserConfig(headless=False))
 async with BrowserPool(config) as pool:
     async with pool.acquire() as tab:
         await tab.navigate("https://waf-protected-site.com")
-        await tab.wait_for_stable_dom(timeout=15.0)
+        await tab.wait_for_network_idle(timeout=15.0)
         html = await tab.content()
 ```
 
-## DOM Stability Waiting
+For a headless *farm* that still needs to clear Turnstile, run the **headful GPU container** ([Docker headful](/voidcrawl/guides/examples/docker-headful/)) rather than headless.
 
-JS-heavy sites and WAF challenge pages don't have their content ready at page load. Instead of a blind `sleep()`, use `wait_for_stable_dom()`:
+## Overriding the defaults
+
+Every default flag is overridable -- force a GPU backend, disable acceleration, add a proxy bypass. Caller `extra_args` are merged by **switch key**: a caller value *replaces* the matching default (VoidCrawl does not emit duplicate switches, since Chrome's per-switch precedence is inconsistent).
+
+```python
+from voidcrawl import BrowserConfig
+
+# Force software rendering (e.g. to compare, or on a GPU-less box):
+BrowserConfig(extra_args=["--use-angle=swiftshader"])
+
+# Disable the GPU entirely:
+BrowserConfig(extra_args=["--disable-gpu"])
+```
+
+The same `extra_args` flow through the MCP server and pool config.
+
+## Waiting for readiness (event-driven)
+
+JS-heavy sites and challenge pages aren't ready at page load. Instead of a blind `sleep()`, use an event-driven wait -- no polling:
 
 ```python
 async with pool.acquire() as tab:
     await tab.navigate(url)
 
-    stabilised = await tab.wait_for_stable_dom(
-        timeout=15.0,      # max seconds to wait
-        min_length=5000,   # min chars before page is "real"
-        stable_checks=5,   # consecutive stable polls required
-    )
+    # Chrome's networkIdle lifecycle event (returns event name, or None on timeout):
+    await tab.wait_for_network_idle(timeout=15.0)
 
-    if not stabilised:
-        print("Page didn't fully render")
+    # ...or wait for a specific element via an in-page MutationObserver:
+    await tab.wait_for_selector("#results", timeout=15.0)
 ```
 
-This polls `document.body.innerHTML.length` every 300ms and considers the page ready when the size stabilizes above the minimum threshold. It prevents redirect gates, loading spinners, and challenge pages from being mistaken for real content.
+`networkIdle` fires after **zero in-flight requests for 500ms** -- but WebSockets, SSE/long-polling, analytics beacons, and lazy-loading keep the network active, so on many SPAs it **never fires**. Prefer `wait_for_selector("<the element you actually care about>")` for those.
 
 ## Disabling Stealth
 
@@ -133,48 +183,40 @@ async with BrowserSession(BrowserConfig(stealth=False)) as session:
     page = await session.new_page("https://trusted-site.com")
 ```
 
-Stealth is always on for `BrowserPool`. The minimal patches have negligible overhead.
+Note that the clean **launch flags** (including the GPU and anti-automation set) apply regardless of `stealth`; the toggle only governs the per-page UA/Client-Hints override.
 
 ## Real-World Results
 
-Tested against Akamai WAF (BusinessWire) -- the same site that blocks Playwright, Selenium, and chromiumoxide with heavy stealth patches:
+| Target | Approach | Result |
+|--------|----------|--------|
+| Akamai WAF (BusinessWire) | chromiumoxide defaults (`--enable-automation`) | 403 Access Denied |
+| Akamai WAF (BusinessWire) | + heavy JS spoofing + fake UA | 403 Access Denied |
+| Akamai WAF (BusinessWire) | clean flags + real UA, no JS injection | **Success (600K chars)** |
+| Managed Cloudflare Turnstile (real sitekey) | headful, hardware GPU, consistent UA, no JS | **Pass** (`siteverify success:true`) |
+| Managed Cloudflare Turnstile | headless | Gated (`before-interactive`) |
 
-| Approach | Result |
-|----------|--------|
-| chromiumoxide defaults (`--enable-automation`) | 403 Access Denied |
-| chromiumoxide + heavy JS spoofing + fake UA | 403 Access Denied |
-| chromiumoxide + clean flags + no UA override | **Success (600K chars)** |
-| zendriver (reference) | Success |
-| Plain curl | 403 Access Denied |
-
-**The lesson: the flags matter more than the JS patches.**
-
-## Going Further
-
-- [Cookbook: Combining headers with stealth](/voidcrawl/guides/cookbook/#combining-set_headers-with-stealth-mode) -- layer custom HTTP headers on top of stealth patches
-- [Cookbook: Per-tab fingerprints](/voidcrawl/guides/cookbook/#per-tab-fingerprint-customisation-via-javascript) -- override timezone, screen, and WebGL per tab
-- [Cookbook: Setting cookies](/voidcrawl/guides/cookbook/#setting-custom-cookies) -- inject cookies before navigating to a target domain
+**The lesson, twice over: the flags plus a consistent real browser matter more than JS patches -- and a wrong JS patch is worse than none.**
 
 ## FAQs
 
 <details>
 <summary>Will stealth mode bypass all bot detection?</summary>
 
-No. VoidCrawl's stealth handles most common WAFs (Akamai, Cloudflare basic). Advanced protections that analyze traffic patterns, require CAPTCHAs, or use device attestation are outside the current scope.
+No. VoidCrawl (headful) clears common WAFs and managed Cloudflare Turnstile. Headless is still gated by managed Turnstile, and protections relying on IP reputation, residential-only access, or interactive CAPTCHAs may still require a proxy or a human.
 
 </details>
 
 <details>
 <summary>Does stealth add latency?</summary>
 
-Negligible. The JS patches are injected once per tab creation via `addScriptToEvaluateOnNewDocument` and execute before any page script. The flag changes are applied at Chrome launch time with zero runtime cost.
+Negligible. There is no per-tab JS injection anymore; the only per-tab step is a single CDP `setUserAgentOverride`. Flag changes are applied at Chrome launch with zero runtime cost.
 
 </details>
 
 <details>
 <summary>Why not use a custom user-agent?</summary>
 
-A custom UA that doesn't match the actual Chrome version is an instant detection signal. VoidCrawl uses Chrome's real user-agent, which is always consistent with the actual browser binary.
+A custom UA that doesn't match the actual Chrome version is an instant detection signal. VoidCrawl uses Chrome's real user-agent (stripping only any `Headless` token) and makes `navigator.platform` + Client Hints agree with it.
 
 </details>
 
@@ -185,3 +227,5 @@ A custom UA that doesn't match the actual Chrome version is an instant detection
 <a id="ref-2"></a>○ **nodriver**. ultrafunkamsterdam. *Predecessor to zendriver.* https://github.com/ultrafunkamsterdam/nodriver
 
 <a id="ref-3"></a>◑ **undetected-chromedriver**. ultrafunkamsterdam. *Patched ChromeDriver to bypass bot detection.* https://github.com/ultrafunkamsterdam/undetected-chromedriver
+
+<a id="ref-4"></a>▢ **rebrowser bot-detector**. *CDP/automation leak test harness used to verify the fingerprint.* https://bot-detector.rebrowser.net/

@@ -1,0 +1,229 @@
+---
+title: Native Chrome Profiles
+description: Lease an existing Chrome profile (cookies, logins, extensions) exclusively for a VoidCrawl session.
+faqs:
+  - q: What is a native Chrome profile in VoidCrawl?
+    a: >-
+      A directory under Chrome's user data root (for example
+      ~/.config/google-chrome/Profile 1) that already contains your cookies,
+      logged-in sessions, and installed extensions. VoidCrawl can lease one of these
+      exclusively and launch Chrome against it, so your scrape inherits the same
+      logged-in state your real browser has.
+  - q: Where does VoidCrawl look for installed profiles?
+    a: >-
+      On Linux, the user config dirs for google-chrome, chromium, and
+      google-chrome-beta. On macOS, the Application Support dirs for Google Chrome
+      and Chromium. On Windows, the Local AppData User Data dirs for Chrome and
+      Chromium. Any directory under those roots containing a Preferences file counts.
+  - q: What happens if two processes try to lease the same profile?
+    a: >-
+      The second caller sees ProfileBusy immediately (if lease_timeout is 0) or
+      ProfileLeaseExpired after waiting the full timeout. VoidCrawl uses a
+      cross-process advisory lock at profile/.voidcrawl.lock, so the arbitration
+      works even across separate Python interpreters.
+  - q: Do I need to close my real Chrome before leasing a profile?
+    a: >-
+      Yes, for the specific profile you want to lease. Chrome itself holds a
+      SingletonLock on any profile it is actively using, independent of VoidCrawl's
+      lock. If your daily-driver Chrome has that profile open, close the window first.
+  - q: Why one Chrome process per profile instead of one Chrome with profile-directory?
+    a: >-
+      Per-profile isolation. Separate user-data-dir processes each crash, restart, and
+      lease independently, and they sidestep Chrome's internal singleton behaviour.
+      The trade-off is roughly 200 MB RAM per active profile, which is acceptable for
+      pipeline workloads.
+  - q: Is the profile API available over MCP?
+    a: >-
+      No, it is Python-only. The MCP server picks a profile at startup with
+      --profile NAME or VOIDCRAWL_PROFILE, and agents drive whatever Chrome the
+      operator handed them. That keeps profile selection a human decision.
+  - q: Does VoidCrawl create new profiles or seed them with logins?
+    a: >-
+      No. VoidCrawl borrows warm profiles you already maintain in real Chrome. Log
+      into the service you need normally, then point VoidCrawl at that profile name.
+references:
+  - title: Chrome user data directory reference
+    url: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/user_data_dir.md
+  - title: fs2 crate (cross-platform advisory file locks)
+    url: https://docs.rs/fs2/latest/fs2/
+  - title: VoidCrawl repository
+    url: https://github.com/CascadingLabs/VoidCrawl
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Sometimes a scrape needs the same Chrome you use day to day, logged into LinkedIn, your SSO provider, or a SaaS dashboard. VoidCrawl's profile API leases one of your real Chrome profiles exclusively for a session, launches Chrome against it, and returns the lease when you are done.
+
+This is a **Python-only surface**. The [MCP server](/voidcrawl/guides/mcp-server/) pins to a profile at startup, but never exposes profile management to agents.
+
+## Listing installed profiles
+
+```python
+from voidcrawl.profiles import list_profiles
+
+for p in list_profiles():
+    print(p.name, p.path)
+```
+
+`list_profiles()` is synchronous and safe to call from any thread. It discovers every directory under the platform-specific Chrome root that contains a `Preferences` file.
+
+| OS | Discovery root |
+|---|---|
+| Linux | `~/.config/google-chrome/`, `~/.config/chromium/`, `~/.config/google-chrome-beta/` |
+| macOS | `~/Library/Application Support/Google/Chrome/`, `~/Library/Application Support/Chromium/` |
+| Windows | `%LOCALAPPDATA%\Google\Chrome\User Data\`, `%LOCALAPPDATA%\Chromium\User Data\` |
+
+Common profile names: `Default`, `Profile 1`, `Profile 2`, `Guest Profile`.
+
+## Leasing a profile
+
+The happy path is the `with_profile` async context manager:
+
+```python
+import asyncio
+from voidcrawl.profiles import with_profile
+
+async def main():
+    async with with_profile("Profile 1") as handle:
+        page = await handle.session.new_page("https://linkedin.com/feed")
+        html = await page.content()
+        print(len(html))
+
+asyncio.run(main())
+```
+
+On entry, VoidCrawl:
+
+1. Resolves `"Profile 1"` to its on-disk path.
+2. Opens `<profile>/.voidcrawl.lock` and takes an exclusive advisory lock (cross-process, cross-user).
+3. Launches Chrome headful with `--user-data-dir=<profile>`.
+4. Hands back a `ProfileHandle` exposing `.session` (a live `BrowserSession`).
+
+On exit, Chrome is closed cleanly and the lock file is released.
+
+<Aside type="caution">
+The real Chrome you use day-to-day **must not be running on the same profile** when you lease it. Chrome itself holds a `SingletonLock` on an active profile; VoidCrawl's lock is a separate layer on top. If your daily-driver Chrome has `Profile 1` open, close that window first.
+</Aside>
+
+## Lease errors
+
+| Exception | When it fires |
+|---|---|
+| `ProfileNotFound` | No directory matching `name` under any discovery root. |
+| `ProfileBusy` | Another voidcrawl process holds the lock and `lease_timeout=0`. |
+| `ProfileLeaseExpired` | Lock was held for the full `lease_timeout` window and we gave up waiting. |
+
+All three inherit from `VoidCrawlError`, so a broad `except VoidCrawlError:` catches everything:
+
+```python
+from voidcrawl.profiles import with_profile, ProfileBusy, ProfileNotFound
+
+try:
+    async with with_profile("Profile 1", lease_timeout=10.0) as handle:
+        ...
+except ProfileBusy:
+    print("Another pipeline is already using this profile")
+except ProfileNotFound as e:
+    print(f"No such profile: {e}")
+```
+
+`lease_timeout` is the number of seconds to poll before giving up (default `300.0`). Use `0.0` for a fail-fast check.
+
+## Low-level API
+
+If you need explicit lifecycle control, for example when embedding into another context manager:
+
+```python
+from voidcrawl.profiles import acquire_profile, release_profile
+
+handle = await acquire_profile("Profile 1", lease_timeout=30.0)
+try:
+    page = await handle.session.new_page("https://example.com")
+    ...
+finally:
+    await release_profile(handle)
+```
+
+## Design notes
+
+- **One Chrome process per profile.** Every lease spawns its own `--user-data-dir` Chrome. This costs roughly 200 MB RAM per active profile but gives you clean per-profile crash isolation and sidesteps Chrome's `--profile-directory` singleton locking.
+- **Warm profiles only.** VoidCrawl never creates or seeds profiles. Log into whatever service you need in real Chrome first; VoidCrawl borrows it.
+- **MCP scope.** Profile management is pipeline-only; agents drive whatever profile you pinned at server launch. See the [MCP server guide](/voidcrawl/guides/mcp-server/#pinning-to-a-chrome-profile).
+
+## Rotation (bot-wall hygiene)
+
+Hitting a bot-managed domain repeatedly from one identity raises its risk score. Rotation is a pipeline pattern, not an agent action -- keep a pool of `(proxy, profile)` identities and pick one per task:
+
+- **Proxy first.** A residential / rotating exit (`BrowserConfig.proxy`) is the biggest lever for IP reputation -- and the *only* lever once the fingerprint is already clean (see [Stealth](/voidcrawl/guides/stealth/)).
+- **Profile per identity.** Give each identity its own `user_data_dir` and round-robin. Don't fan one profile across concurrent leases -- Chrome locks it (one process per profile).
+- **Pace.** Reuse one session for same-origin work; space `fetch_many` batches against managed domains rather than firing them back-to-back.
+
+There is no built-in rotator; it's a caller/pipeline concern.
+
+## Warm profiles & Cloudflare `cf_clearance`
+
+A profile that's browsed a Cloudflare-fronted site carries a `cf_clearance` cookie. Be precise about what that buys you:
+
+- ✅ It satisfies the Cloudflare **edge** challenge (the "checking your browser" interstitial) on revisits.
+- ❌ It does **not** satisfy an **inline managed-Turnstile widget** -- that issues a separate `cf-turnstile-response` token, scored fresh per request. A banked `cf_clearance` does nothing for it.
+
+So a warm profile helps you *reach* a Cloudflare-fronted page, but clearing an on-page Turnstile is the **headful + hardware-GPU** job ([Captcha handling](/voidcrawl/guides/captcha-handling/)). `cf_clearance` is also bound to the UA, so it only helps if the session presents the same UA that earned it. To persist it, mount a persistent `user_data_dir` (or a Docker volume over the profile dir).
+
+## FAQs
+
+<details>
+<summary>What is a native Chrome profile in VoidCrawl?</summary>
+
+A directory under Chrome's user data root (for example `~/.config/google-chrome/Profile 1`) that already contains your cookies, logged-in sessions, and installed extensions. VoidCrawl can lease one of these exclusively and launch Chrome against it, so your scrape inherits the same logged-in state your real browser has.
+
+</details>
+
+<details>
+<summary>Where does VoidCrawl look for installed profiles?</summary>
+
+See the platform table above. Any directory under those roots containing a `Preferences` file is recognised as a profile.
+
+</details>
+
+<details>
+<summary>What happens if two processes try to lease the same profile?</summary>
+
+The second caller sees `ProfileBusy` immediately (if `lease_timeout=0`) or `ProfileLeaseExpired` after waiting the full timeout. VoidCrawl uses a cross-process advisory lock at `<profile>/.voidcrawl.lock`, so the arbitration works even across separate Python interpreters.
+
+</details>
+
+<details>
+<summary>Do I need to close my real Chrome before leasing a profile?</summary>
+
+Yes, for the specific profile you want to lease. Chrome itself holds a `SingletonLock` on any profile it is actively using, independent of VoidCrawl's lock. If your daily-driver Chrome has that profile open, close the window first.
+
+</details>
+
+<details>
+<summary>Why one Chrome process per profile instead of one Chrome with --profile-directory?</summary>
+
+Per-profile isolation. Separate `--user-data-dir` processes each crash, restart, and lease independently, and they sidestep Chrome's internal singleton behaviour. The trade-off is roughly 200 MB RAM per active profile, which is acceptable for pipeline workloads.
+
+</details>
+
+<details>
+<summary>Is the profile API available over MCP?</summary>
+
+No, it is Python-only. The MCP server picks a profile at startup with `--profile NAME` or `VOIDCRAWL_PROFILE=NAME`, and agents drive whatever Chrome the operator handed them. That keeps profile selection a human decision.
+
+</details>
+
+<details>
+<summary>Does VoidCrawl create new profiles or seed them with logins?</summary>
+
+No. VoidCrawl borrows warm profiles you already maintain in real Chrome. Log into the service you need normally, then point VoidCrawl at that profile name.
+
+</details>
+
+## References
+
+△ **User Data Directory**. Chromium. *Reference for Chrome's user data root and profile layout.* https://chromium.googlesource.com/chromium/src/+/HEAD/docs/user_data_dir.md
+
+○ **fs2**. danburkert. *Cross-platform advisory file locks in Rust, used for profile arbitration.* https://docs.rs/fs2/latest/fs2/
+
+◑ **VoidCrawl**. CascadingLabs. *VoidCrawl source repository on GitHub.* https://github.com/CascadingLabs/VoidCrawl

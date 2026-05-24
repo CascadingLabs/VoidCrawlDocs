@@ -359,7 +359,7 @@ from voidcrawl import BrowserConfig, BrowserSession
 async with BrowserSession(BrowserConfig(stealth=True)) as browser:
     page = await browser.new_page("about:blank")
 
-    # Stealth is already active -- navigator.webdriver is undefined,
+    # Stealth is already active -- navigator.webdriver is a native false,
     # automation flags are stripped. Now layer custom HTTP headers:
     await page.set_headers({
         "Accept-Language": "ja-JP,ja;q=0.9",

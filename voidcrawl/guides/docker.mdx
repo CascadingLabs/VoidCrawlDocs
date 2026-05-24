@@ -60,6 +60,18 @@ export CHROME_WS_URLS="http://localhost:9222,http://localhost:9223"
 python your_script.py
 ```
 
+### Hardware GPU (avoid SwiftShader)
+
+By default a headless browser renders WebGL with **SwiftShader** (software) -- a bot signal that managed Turnstile and similar WAFs weigh (see [Stealth](/voidcrawl/guides/stealth/)). The headless image ships the Mesa Vulkan/GL drivers and the container Chrome launches with `--headless=new` + ANGLE + `--disable-gpu-sandbox`, so passing the host's render node gives **hardware** WebGL. `docker/docker-compose.yml` already declares it:
+
+```yaml
+devices:
+  - /dev/dri:/dev/dri
+group_add: ["render"]   # render-node GID; numeric on some hosts
+```
+
+Intel and AMD work through `/dev/dri` out of the box; NVIDIA needs the `nvidia-container-toolkit` (`--gpus all`) instead. With no GPU passed through the container falls back to SwiftShader -- fine for bulk scraping, but for managed-Turnstile targets prefer the headful container below.
+
 ## Headful Docker (GPU + VNC)
 
 Run Chrome with a real GUI inside Docker -- GPU-accelerated, isolated from your desktop, viewable via VNC.

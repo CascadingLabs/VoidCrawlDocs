@@ -1,0 +1,175 @@
+---
+title: Screenshot API
+description: Capture full-page PNGs as bytes, write them to disk, or crop to a bounding box.
+faqs:
+  - q: What changed in the screenshot API in 0.3.0?
+    a: >-
+      Page.screenshot() gained two optional keyword arguments. path writes the PNG
+      straight to disk and returns the path, and bbox crops the capture to a CSS-pixel
+      rectangle. The zero-argument form still returns raw PNG bytes, and the legacy
+      screenshot_png() alias is preserved for backward compatibility.
+  - q: Does the old screenshot_png() method still work?
+    a: >-
+      Yes. screenshot_png() is a thin alias for screenshot() with no arguments and
+      keeps its original signature and return type. Existing 0.2.x code runs unchanged.
+  - q: What coordinate system does bbox use?
+    a: >-
+      CSS pixels, measured from the top-left of the viewport. The origin 0, 0 is the
+      top-left of the visible area. This matches what Element.getBoundingClientRect()
+      returns, so you can measure a target element with JavaScript and pass its rect
+      straight through.
+  - q: How do I handle HiDPI (Retina) displays?
+    a: >-
+      Pass coordinates in CSS pixels, not bitmap pixels. The PNG bitmap is physically
+      larger than the CSS viewport on HiDPI displays (typically 2x on Retina), but
+      VoidCrawl handles the scaling internally. If you measured coordinates by
+      eyeballing a screenshot, divide by window.devicePixelRatio before passing them in.
+  - q: Does VoidCrawl create the parent directory when I pass path?
+    a: >-
+      No. The parent directory must already exist. This is deliberate. Silently creating
+      directories hides typos. Call Path(out_dir).mkdir(parents=True, exist_ok=True)
+      before the screenshot if needed.
+  - q: Can I capture the full scrollable page, not just the viewport?
+    a: >-
+      Not yet. 0.3.0 captures the viewport (optionally cropped). Full-page stitched
+      captures are tracked for 0.4. For now, scroll the page with eval_js between
+      captures and stitch client-side if you need the whole document.
+references:
+  - title: "Chrome DevTools Protocol: Page.captureScreenshot"
+    url: https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-captureScreenshot
+  - title: Element.getBoundingClientRect (MDN)
+    url: https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect
+  - title: Window.devicePixelRatio (MDN)
+    url: https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`Page.screenshot()` captures a PNG of the current viewport. The signature is additive: the original no-argument form still returns bytes, and new keyword arguments unlock file output and cropping.
+
+## Signatures
+
+```python
+# Return raw PNG bytes (original behaviour, still the default).
+png: bytes = await page.screenshot()
+
+# Write PNG to disk and return the path.
+path: str = await page.screenshot(path="out/home.png")
+
+# Crop to a bounding box (x, y, width, height in CSS pixels).
+png: bytes = await page.screenshot(bbox=(100, 200, 400, 300))
+
+# Both.
+path: str = await page.screenshot(path="out/crop.png", bbox=(0, 0, 800, 600))
+```
+
+The legacy `screenshot_png()` helper is preserved as a thin alias for the zero-argument form, so existing 0.2.x code keeps working unchanged.
+
+## Writing to disk
+
+Passing `path=` tells VoidCrawl to stream the PNG straight to the filesystem. The parent directory must already exist. VoidCrawl does not create directories for you. The returned string is the same path you passed, for convenient chaining:
+
+```python
+from pathlib import Path
+
+out = Path("evidence")
+out.mkdir(exist_ok=True)
+
+async with pool.acquire() as tab:
+    await tab.goto("https://qscrape.dev")
+    saved = await tab.screenshot(path=out / "home.png")
+    print(f"saved {saved}")
+```
+
+## Cropping with bbox
+
+`bbox=(x, y, width, height)` issues a CDP `Page.captureScreenshot` with a `clip` region. Use it when your evidence artefact is a specific figure on the page, a price, a score, a form field, and you do not want the rest of the screenshot cluttering storage or OCR.
+
+Coordinates are in **CSS pixels**, measured from the top-left of the viewport. `(0, 0)` is the top-left of the visible area.
+
+<Aside type="note">
+On HiDPI displays the PNG bitmap is physically larger than the CSS viewport (for example 2x on Retina). The `bbox` is still in CSS pixels. VoidCrawl handles the bitmap scaling for you. If you are measuring coords by eyeballing a screenshot, remember to divide by `window.devicePixelRatio` before passing them in.
+</Aside>
+
+### Worked example: crop to a single element
+
+```python
+rect = await page.evaluate_js("""
+    (() => {
+        const el = document.querySelector('.price-tag');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return [r.x, r.y, r.width, r.height];
+    })()
+""")
+
+if rect:
+    await page.screenshot(path="price.png", bbox=tuple(int(v) for v in rect))
+```
+
+## Return types at a glance
+
+| Call | Returns |
+|---|---|
+| `screenshot()` | `bytes` |
+| `screenshot(bbox=...)` | `bytes` |
+| `screenshot(path=...)` | `str` (the path) |
+| `screenshot(path=..., bbox=...)` | `str` |
+| `screenshot_png()` | `bytes` (back-compat alias) |
+
+## FAQs
+
+<details>
+<summary>What changed in the screenshot API in 0.3.0?</summary>
+
+The `Page.screenshot()` method gained two optional keyword arguments. `path=` writes the PNG straight to disk and returns the path. `bbox=(x, y, w, h)` crops the capture to a CSS-pixel rectangle. The zero-argument form still returns raw PNG bytes, and the legacy `screenshot_png()` alias is preserved.
+
+</details>
+
+<details>
+<summary>Does the old screenshot_png() method still work?</summary>
+
+Yes. `screenshot_png()` is a thin alias for `screenshot()` with no arguments and keeps its original signature and return type. Existing 0.2.x code runs unchanged.
+
+</details>
+
+<details>
+<summary>What coordinate system does bbox use?</summary>
+
+CSS pixels, measured from the top-left of the viewport. `(0, 0)` is the top-left of the visible area. This matches what `Element.getBoundingClientRect()` returns, so you can measure a target element with JavaScript and pass its rect straight through.
+
+</details>
+
+<details>
+<summary>How do I handle HiDPI (Retina) displays?</summary>
+
+Pass coordinates in CSS pixels, not bitmap pixels. The PNG bitmap is physically larger than the CSS viewport on HiDPI displays (typically 2x on Retina), but VoidCrawl handles the scaling internally. If you measured coordinates by eyeballing a screenshot, divide by `window.devicePixelRatio` before passing them in.
+
+</details>
+
+<details>
+<summary>Does VoidCrawl create the parent directory when I pass path=?</summary>
+
+No. The parent directory must already exist. This is deliberate: silently creating directories hides typos. Call `Path(out_dir).mkdir(parents=True, exist_ok=True)` before the screenshot if needed.
+
+</details>
+
+<details>
+<summary>Can I capture the full scrollable page, not just the viewport?</summary>
+
+Not yet. 0.3.0 captures the viewport (optionally cropped). Full-page stitched captures are tracked for 0.4. For now, scroll the page with `eval_js` between captures and stitch client-side if you need the whole document.
+
+</details>
+
+## Related
+
+- [Example: Screenshots](/voidcrawl/guides/examples/screenshots/), a minimal runnable script.
+- [MCP server: `screenshot` tool](/voidcrawl/guides/mcp-server/#tools), the same API exposed over stdio.
+
+## References
+
+△ **Page.captureScreenshot**. Chrome DevTools Protocol. *CDP method that VoidCrawl's screenshot API wraps.* https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-captureScreenshot
+
+○ **Element.getBoundingClientRect**. MDN. *The DOM API that produces the rectangle you can pass as `bbox`.* https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect
+
+◑ **Window.devicePixelRatio**. MDN. *Reference for the CSS-pixel to bitmap-pixel ratio on HiDPI displays.* https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio

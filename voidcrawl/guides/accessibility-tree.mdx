@@ -1,0 +1,174 @@
+---
+title: Accessibility Tree
+description: Read and act on a page through its accessibility tree, the semantic view assistive tech sees, for navigation that survives markup churn.
+faqs:
+  - q: When should I use the AX tree instead of CSS selectors?
+    a: >-
+      Reach for it when a page has good semantics but volatile markup, the hashed
+      class names and deeply nested wrappers of most React and Tailwind apps. A
+      role plus accessible name like button "Load more" survives a redesign that
+      would break a CSS selector. Use CSS when the page is markup-stable or its AX
+      tree is thin.
+  - q: Why does get_full_ax_tree return almost nothing?
+    a: >-
+      Two common causes. Either the page has not finished rendering, the AX tree
+      only reflects real content after JavaScript runs, so call it after navigation
+      settles. Or the page genuinely has poor semantics, lots of div soup and few
+      roles. Compare named_count to node_count, when the ratio is low, fall back to
+      HTML, a screenshot, or CSS selectors.
+  - q: What is backendDOMNodeId for?
+    a: >-
+      It is the bridge from an AX node back to its DOM element. click_by_role uses
+      it internally to resolve the matched accessibility node to the real element,
+      scroll it into view, and click it. You rarely need to touch it directly.
+  - q: How does click_by_role disambiguate when several elements share a role and name?
+    a: >-
+      It clicks the nth non-ignored match, zero-based, defaulting to the first. If a
+      page has three button "Add to cart" controls, pass nth=2 for the third. Use
+      query_ax_tree first to see how many match.
+references:
+  - title: WAI-ARIA 1.2
+    url: https://www.w3.org/TR/wai-aria-1.2/
+  - title: CDP Accessibility domain
+    url: https://chromedevtools.github.io/devtools-protocol/tot/Accessibility/
+  - title: Accessible Name and Description Computation
+    url: https://www.w3.org/TR/accname-1.2/
+  - title: ARIA roles (MDN)
+    url: https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Roles
+---
+
+import { Aside, Card } from '@astrojs/starlight/components';
+
+Every page Chrome renders has a second tree beside the DOM: the **accessibility tree**, the semantic view that screen readers and other assistive tech consume. Chrome computes it from [WAI-ARIA](https://www.w3.org/TR/wai-aria-1.2/)<sup>[△](#ref-1)</sup> roles and the [accessible name](https://www.w3.org/TR/accname-1.2/)<sup>[◑](#ref-3)</sup> algorithm: implicit roles are resolved, names are computed, and `aria-hidden` or `display:none` nodes are pruned. VoidCrawl exposes it through the [CDP Accessibility domain](https://chromedevtools.github.io/devtools-protocol/tot/Accessibility/)<sup>[○](#ref-2)</sup>.
+
+The payoff is durability. A control identified as `button "Load more"` keeps that identity across a redesign that rewrites every class name and wrapper `div`. The accessibility tree is the markup-independent analogue of the [DOM](/voidcrawl/guides/understanding-the-dom/): query and click by what an element *is*, not where it sits in the HTML.
+
+## Reading the tree
+
+There are two views, both on `Page` and `PooledTab`. Start with the outline.
+
+`ax_tree_outline(depth=None)` returns a compact, indented `role "name"` string with text-noise and hidden nodes pruned. This is the view to read, whether you are an engineer eyeballing a page or an agent deciding what to click.
+
+```python
+import asyncio
+from voidcrawl import BrowserPool, PoolConfig
+
+async def main() -> None:
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            await tab.goto("https://qscrape.dev")
+            print(await tab.ax_tree_outline())
+
+asyncio.run(main())
+```
+
+```
+document
+  navigation
+    link "Home"
+    link "Docs"
+  main
+    heading "qScrape"
+    button "Get started"
+```
+
+`get_full_ax_tree(depth=None)` returns the raw CDP nodes as a flat list of dicts, linked by `childIds` and `parentId`. Reach for this when you need the structured data rather than a readable summary. Each node carries:
+
+| Field | Meaning |
+|---|---|
+| `role` | AXValue-wrapped role, e.g. `{"value": "button"}`. |
+| `name` | AXValue-wrapped computed accessible name. |
+| `properties` | State such as `focusable`, `expanded`, `checked`. |
+| `childIds` / `parentId` | Tree links between nodes. |
+| `backendDOMNodeId` | The bridge back to the DOM element. |
+| `ignored` | Whether the node is excluded from the AX tree. |
+
+`depth` bounds how far descendants are walked on either call; `None` returns the whole tree.
+
+<Aside type="note">
+The AX tree only reflects real content **after** JavaScript has rendered the page. Call these methods once navigation has settled (for example after [`wait_for_network_idle`](/voidcrawl/guides/builtin-actions/)), or the tree will be near-empty.
+</Aside>
+
+## Querying for nodes
+
+`query_ax_tree(role=None, name=None)` is the AX analogue of `query_selector_all`: it returns matching nodes addressed by semantics instead of markup. Name matching is exact against the browser's computed accessible name, and `role` accepts any [ARIA role](https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Roles)<sup>[◇](#ref-4)</sup>. Passing neither argument returns every node under the document root.
+
+```python
+# Every actionable control on the page
+buttons = await tab.query_ax_tree(role="button")
+print([b["name"]["value"] for b in buttons])
+
+# A specific control
+matches = await tab.query_ax_tree(role="link", name="Docs")
+```
+
+## Acting on a node
+
+`click_by_role(role, name, nth=0)` is the durable counterpart to clicking a CSS selector. It resolves the match through `Accessibility.queryAXTree`, picks the `nth` non-ignored node (zero-based), bridges to the DOM via `backendDOMNodeId`, scrolls it into view, and clicks. It raises if no such node exists.
+
+```python
+await tab.click_by_role("button", "Load more")
+
+# Third "Add to cart" button on the page
+await tab.click_by_role("button", "Add to cart", nth=2)
+```
+
+When several elements share a role and name, query first to see how many match, then index with `nth`.
+
+## When the tree is thin
+
+Not every page has good semantics. A `div`-soup app with few roles produces a sparse AX tree, and role-based navigation will be unreliable on it. The signal is the ratio of named nodes to total nodes: when it is low, the page is telling you to fall back to [CSS selectors](/voidcrawl/guides/understanding-the-dom/), a [screenshot](/voidcrawl/guides/screenshot-api/), or raw HTML. The MCP `session_ax_tree` tool surfaces this ratio directly as `named_count` versus `node_count`.
+
+## From an MCP agent
+
+The same capability is available to Claude Code and other MCP clients through two tools on the [MCP server](/voidcrawl/guides/mcp-server/):
+
+- `session_ax_tree` returns the outline (`mode=compact`, default) or raw nodes (`mode=raw`), plus `node_count` and `named_count` so the agent can judge AX richness before relying on it.
+- `click_by_role` clicks by `role` and `name`, with an optional `nth`, as the markup-independent alternative to the `click` tool.
+
+See the [MCP Server guide](/voidcrawl/guides/mcp-server/) for the full tool list and the fallback chain to `click` and `click_visual_coords`.
+
+## Examples
+
+- [`examples/accessibility_tree.py`](https://github.com/CascadingLabs/VoidCrawl/blob/main/examples/accessibility_tree.py) -- snapshot the full AX tree and reconstruct the hierarchy.
+- [`examples/accessibility_navigation.py`](https://github.com/CascadingLabs/VoidCrawl/blob/main/examples/accessibility_navigation.py) -- list actionable controls and drive the page with `click_by_role`.
+
+## FAQs
+
+<details>
+<summary>When should I use the AX tree instead of CSS selectors?</summary>
+
+Reach for it when a page has good semantics but volatile markup, the hashed class names and deeply nested wrappers of most React and Tailwind apps. A role plus accessible name like `button "Load more"` survives a redesign that would break a CSS selector. Use CSS when the page is markup-stable or its AX tree is thin.
+
+</details>
+
+<details>
+<summary>Why does get_full_ax_tree return almost nothing?</summary>
+
+Two common causes. Either the page has not finished rendering (the AX tree only reflects real content after JavaScript runs, so call it after navigation settles), or the page genuinely has poor semantics, lots of `div` soup and few roles. Compare `named_count` to `node_count`: when the ratio is low, fall back to HTML, a screenshot, or CSS selectors.
+
+</details>
+
+<details>
+<summary>What is backendDOMNodeId for?</summary>
+
+It is the bridge from an AX node back to its DOM element. `click_by_role` uses it internally to resolve the matched accessibility node to the real element, scroll it into view, and click it. You rarely need to touch it directly.
+
+</details>
+
+<details>
+<summary>How does click_by_role disambiguate when several elements share a role and name?</summary>
+
+It clicks the `nth` non-ignored match (zero-based, defaulting to the first). If a page has three `button "Add to cart"` controls, pass `nth=2` for the third. Use `query_ax_tree` first to see how many match.
+
+</details>
+
+## References
+
+<a id="ref-1"></a>△ **WAI-ARIA 1.2**. W3C. *Roles, states, and properties that define the accessibility tree.* https://www.w3.org/TR/wai-aria-1.2/
+
+<a id="ref-2"></a>○ **CDP Accessibility domain**. Chrome DevTools Protocol. *getFullAXTree and queryAXTree, the calls VoidCrawl wraps.* https://chromedevtools.github.io/devtools-protocol/tot/Accessibility/
+
+<a id="ref-3"></a>◑ **Accessible Name and Description Computation**. W3C. *How the browser computes the accessible name matched by query_ax_tree and click_by_role.* https://www.w3.org/TR/accname-1.2/
+
+<a id="ref-4"></a>◇ **ARIA roles**. MDN. *Reference for the role values you pass to query_ax_tree and click_by_role.* https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Roles

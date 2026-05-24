@@ -54,11 +54,11 @@ if __name__ == "__main__":
 
 | Signal | Stealth ON | Stealth OFF |
 |--------|-----------|------------|
-| `navigator.webdriver` | `undefined` or `None` | `True` |
+| `navigator.webdriver` | `false` | `true` |
 | `plugins_count` | > 0 (real plugins) | > 0 (real plugins) |
 | `languages` | Realistic list | Realistic list |
 | `has_chrome_runtime` | `True` | `True` |
 
-The key difference is `navigator.webdriver`. With stealth on, it's removed from the prototype chain. With stealth off, Chrome sets it to `true`, which is the primary signal WAFs check.
+The key difference is `navigator.webdriver`. With stealth on it's a native **`false`** -- VoidCrawl does **not** patch it in JS (deleting it to `undefined` is itself a tell); the launch flag `--disable-blink-features=AutomationControlled` produces a real `false`. With stealth off, Chrome sets it to `true`, which is the primary signal WAFs check.
 
 See the [Stealth Mode guide](/voidcrawl/guides/stealth/) for the full explanation of what's patched and why.

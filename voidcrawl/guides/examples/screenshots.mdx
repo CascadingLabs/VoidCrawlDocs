@@ -1,9 +1,9 @@
 ---
 title: "Example: Screenshots"
-description: Capture PNG screenshots of pages.
+description: Capture PNG screenshots as bytes, direct to disk, or cropped to a bounding box.
 ---
 
-Save full-page screenshots as PNG files.
+Save full-page screenshots or crop to a specific region. As of 0.3.0 the `screenshot()` method can write straight to disk and accept a bounding box.
 
 ## Code
 
@@ -20,11 +20,21 @@ async def _capture() -> None:
     async with BrowserPool(PoolConfig()) as pool, pool.acquire() as tab:
         await tab.goto("https://qscrape.dev")
 
-        # PNG screenshot
-        png_bytes = await tab.screenshot_png()
-        png_path = OUTPUT_DIR / "example.png"
-        png_path.write_bytes(png_bytes)
-        print(f"Screenshot saved: {png_path} ({len(png_bytes)} bytes)")
+        # 1. Raw bytes. Do whatever you want with them.
+        png_bytes = await tab.screenshot()
+        print(f"in-memory PNG: {len(png_bytes)} bytes")
+
+        # 2. Straight to disk. Returns the path string.
+
+        saved = await tab.screenshot(path=OUTPUT_DIR / "home.png")
+        print(f"saved: {saved}")
+
+        # 3. Crop to a region (x, y, width, height in CSS pixels).
+        hero = await tab.screenshot(
+            path=OUTPUT_DIR / "hero.png",
+            bbox=(0, 0, 1200, 400),
+        )
+        print(f"cropped hero: {hero}")
 
 
 def main() -> None:
@@ -38,6 +48,8 @@ if __name__ == "__main__":
 
 ## Key Points
 
-- `screenshot_png()` returns raw PNG bytes -- write them to a file with `Path.write_bytes()`.
-- Screenshots capture the full visible viewport as rendered by Chrome.
+- `screenshot()` returns `bytes` by default; pass `path=` to write to disk and get back the path string.
+- `bbox=(x, y, w, h)` crops the capture to a rectangle in CSS pixels, useful for evidence artefacts targeting a specific element.
+- The legacy `screenshot_png()` method is preserved as a back-compat alias for the no-argument form.
 - For headful Docker mode, you can watch the page render in VNC while the screenshot is captured.
+- See the [Screenshot API guide](/voidcrawl/guides/screenshot-api/) for the full signature and HiDPI caveats.

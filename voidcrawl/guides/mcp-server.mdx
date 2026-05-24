@@ -1,0 +1,366 @@
+---
+title: MCP Server
+description: Drive VoidCrawl from Claude Code, Cursor, or any MCP client. Install, wire, and pin to a Chrome profile.
+faqs:
+  - q: What is voidcrawl-mcp?
+    a: >-
+      A stdio Model Context Protocol server that exposes VoidCrawl's browser automation
+      primitives (navigate, click, screenshot, eval_js, and more) as tools an AI agent
+      can call. It reuses the same Rust core as the Python SDK, so tab recycling,
+      stealth, and concurrent pooling all work automatically.
+  - q: How do I install voidcrawl-mcp?
+    a: >-
+      Pick one of uv tool install voidcrawl-mcp, pipx install voidcrawl-mcp, or
+      cargo install from the VoidCrawl GitHub repository. After install, wire it into
+      .mcp.json as a command entry.
+  - q: Why does the MCP server expose click_visual_coords as a first-class tool?
+    a: >-
+      React and similar frameworks install event listeners that only fire on real
+      trusted browser input. A CDP selector-based click calls HTMLElement.click(),
+      which bypasses React's synthetic event system and silently does nothing.
+      click_visual_coords dispatches a real mousePressed and mouseReleased pair at given
+      x, y coordinates so the page sees a genuine user click.
+  - q: Can an AI agent list or switch Chrome profiles at runtime?
+    a: >-
+      No, by design. There is no list_profiles or acquire_profile tool on the server.
+      A Chrome profile is a live authenticated session (cookies, OAuth tokens, saved
+      logins), so letting the model choose one at runtime would let a prompt-injected or
+      misbehaving agent jump into any identity on the machine and exfiltrate it. The
+      launcher grants exactly one profile, pinned with --profile NAME or
+      VOIDCRAWL_PROFILE, and the agent operates with least privilege inside it. Rotation
+      is an operator or Python-caller action between runs: relaunch pinned to a different
+      warm profile, go headful with CHROME_HEADLESS=0, or swap the proxy.
+  - q: How does the MCP server report a captcha wall?
+    a: >-
+      Every tool call that hits a captcha returns an MCP error with code -32001, a
+      human-readable message, and a structured data envelope with exception set to
+      CaptchaDetected and kind set to the provider name. Client middleware can dispatch
+      on data.exception without string-matching the message.
+  - q: Does voidcrawl-mcp work with Cursor or custom MCP clients?
+    a: >-
+      Yes. It is a standard stdio MCP server. Any client that speaks the Model Context
+      Protocol can launch it. Claude Code is the reference target because the recipes
+      in the voidcrawl Skill file are tuned for it.
+  - q: When should an agent use click_by_role instead of click?
+    a: >-
+      When the page has clear accessibility semantics but volatile markup. A role plus
+      accessible name like button "Load more" survives redesigns that rewrite class
+      names and break CSS selectors. Call session_ax_tree first to see the available
+      roles and names, and fall back to click (CSS) or click_visual_coords when a name
+      is ambiguous or the AX tree is thin.
+  - q: What do node_count and named_count in session_ax_tree mean?
+    a: >-
+      node_count is the total accessibility nodes the browser returned; named_count is
+      how many carry a non-empty accessible name. A low named_count relative to
+      node_count signals a thin AX tree, so an agent should fall back to HTML extract,
+      a screenshot, or CSS selectors rather than rely on click_by_role.
+references:
+  - title: Model Context Protocol specification
+    url: https://modelcontextprotocol.io/
+  - title: VoidCrawl repository
+    url: https://github.com/CascadingLabs/VoidCrawl
+  - title: Claude Code MCP configuration docs
+    url: https://docs.claude.com/en/docs/claude-code/mcp
+  - title: chromiumoxide (Rust CDP client)
+    url: https://github.com/mattsse/chromiumoxide
+  - title: WAI-ARIA 1.2
+    url: https://www.w3.org/TR/wai-aria-1.2/
+---
+
+import { Tabs, TabItem, Aside, Card, Steps } from '@astrojs/starlight/components';
+
+`voidcrawl-mcp` is a stdio [Model Context Protocol](https://modelcontextprotocol.io) server that exposes VoidCrawl's browser primitives as tools. Point Claude Code, Cursor, or any MCP-aware agent at it and the model can navigate, click, type, screenshot, and scrape through the same Rust core the Python SDK uses.
+
+The server is written in Rust (part of the VoidCrawl workspace), ships as a single binary, and reuses the full `BrowserPool`, so tab recycling, stealth, and concurrent sessions all work automatically.
+
+## Install
+
+<Tabs>
+  <TabItem label="uv">
+    ```sh
+    uv tool install voidcrawl-mcp
+    ```
+  </TabItem>
+  <TabItem label="pipx">
+    ```sh
+    pipx install voidcrawl-mcp
+    ```
+  </TabItem>
+  <TabItem label="cargo">
+    ```sh
+    cargo install --git https://github.com/CascadingLabs/VoidCrawl voidcrawl-mcp
+    ```
+  </TabItem>
+</Tabs>
+
+After install, `voidcrawl-mcp --help` prints the full CLI. By default the server launches its own headless Chrome pool using the same environment variables as [`PoolConfig.from_env`](/voidcrawl/guides/browser-pool/). Two knobs worth knowing up front:
+
+- **`CHROME_HEADLESS=0`** runs the pool **headful** -- required to clear managed Cloudflare Turnstile and tough WAFs (headless is gated). See [Captcha handling](/voidcrawl/guides/captcha-handling/).
+- **`CHROME_WS_URLS=http://host:9222,...`** makes the server **attach** to an already-running Chromium farm over CDP instead of launching its own -- e.g. a [Docker](/voidcrawl/guides/docker/) container with a reproducible GPU/driver stack. Per-page stealth (UA/Client-Hints) still applies over the attached session.
+
+## Wire it into your AI host
+
+`voidcrawl-mcp` is a single stdio binary; each host just needs a config entry that launches it. Let the binary wire every host for you, or do one host at a time.
+
+### One command for every host
+
+```sh
+voidcrawl-mcp install            # wire Claude Code, Codex, and opencode at once
+voidcrawl-mcp install --dry-run  # print what it would change, write nothing
+voidcrawl-mcp install --status   # report where it's already wired
+```
+
+`install` uses each host's own `mcp add` where one exists and writes the config file directly otherwise. If a host isn't installed, it prints the exact block to paste in once you do. Use `--scope project` to write committed, in-repo config instead of your user config, and `--tool claude|codex|opencode` to wire just one.
+
+### Or wire one host at a time
+
+<Tabs>
+  <TabItem label="Claude Code">
+    ```sh
+    claude mcp add --scope user voidcrawl \
+      --env BROWSER_COUNT=1 --env TABS_PER_BROWSER=5 --env CHROME_HEADLESS=1 \
+      -- voidcrawl-mcp
+    ```
+
+    Or add it by hand to `.mcp.json` (project) or `~/.claude.json` (user):
+
+    ```json title=".mcp.json"
+    {
+      "mcpServers": {
+        "voidcrawl": {
+          "command": "voidcrawl-mcp",
+          "env": { "BROWSER_COUNT": "1", "TABS_PER_BROWSER": "5", "CHROME_HEADLESS": "1" }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Codex">
+    ```sh
+    codex mcp add voidcrawl \
+      --env BROWSER_COUNT=1 --env TABS_PER_BROWSER=5 --env CHROME_HEADLESS=1 \
+      -- voidcrawl-mcp
+    ```
+
+    The Codex CLI writes the global `~/.codex/config.toml` only. For a project-scoped server, add it by hand to `.codex/config.toml`:
+
+    ```toml title=".codex/config.toml"
+    [mcp_servers.voidcrawl]
+    command = "voidcrawl-mcp"
+    args = []
+
+    [mcp_servers.voidcrawl.env]
+    BROWSER_COUNT = "1"
+    TABS_PER_BROWSER = "5"
+    CHROME_HEADLESS = "1"
+    ```
+  </TabItem>
+  <TabItem label="opencode">
+    opencode's `mcp add` is interactive, so add it to `opencode.json` (project) or `~/.config/opencode/opencode.json` (user):
+
+    ```json title="opencode.json"
+    {
+      "mcp": {
+        "voidcrawl": {
+          "type": "local",
+          "command": ["voidcrawl-mcp"],
+          "enabled": true,
+          "environment": { "BROWSER_COUNT": "1", "TABS_PER_BROWSER": "5", "CHROME_HEADLESS": "1" }
+        }
+      }
+    }
+    ```
+
+    <Aside type="caution">
+    opencode only reads config from the directory it's launched in (walking up parents). Launch it from your project root, or use the user-level config above so it loads everywhere.
+    </Aside>
+  </TabItem>
+</Tabs>
+
+Launch the host in that directory and the tools below are available immediately.
+
+## Tools
+
+**Stateless (recycled pool tabs)**
+
+| Tool | Purpose |
+|---|---|
+| `fetch` / `fetch_many` | One URL, or many in parallel. The default for bulk extraction. `fetch_many` also returns a `PoolMeta` summary -- `max_tabs`, how many requests `queued`, and the worst queue wait -- so you can tell when you oversubscribed and cap the next batch at `max_tabs`. |
+| `screenshot` | Load a URL, return a PNG; optional `bbox` crop. See the [Screenshot API guide](/voidcrawl/guides/screenshot-api/). |
+| `pool_status` | Live pool snapshot: `max_tabs`, `available`, `in_flight`, `sessions_open`. Read before a big fan-out. |
+
+**Stateful sessions** (login flows, multi-step journeys; each owns its own Chrome profile)
+
+| Tool | Purpose |
+|---|---|
+| `session_open` / `session_navigate` / `session_content` / `session_close` | Open -> navigate -> read HTML/title/url -> tear down. |
+
+**Perceive**
+
+| Tool | Purpose |
+|---|---|
+| `session_ax_tree` | Accessibility tree as a compact outline (`mode=compact`) or raw CDP nodes (`mode=raw`), with `node_count` / `named_count`. |
+| `title` | `document.title`. |
+| `extract` | Run a CSS selector and return matched text content. |
+| `network_capture` | Resource-Timing entries for the current page (url, initiator, size, duration). |
+| `detect_captcha` | DOM probe -> `recaptcha` / `hcaptcha` / `turnstile` / `cloudflare_challenge` / `datadome` / `null`. |
+
+**Act**
+
+| Tool | Purpose |
+|---|---|
+| `click` | Click by CSS selector (synthetic CDP click). |
+| `click_by_role` | Click by accessibility role + accessible name, e.g. `role="button"`, `name="Load more"`. Durable across redesigns. |
+| `click_visual_coords` | Click at `(x, y)` CSS pixels -- the escape hatch for React pages where selector clicks are swallowed. |
+| `type_text` | Type into a selector, or into the focused element. |
+| `eval_js` | Evaluate a JavaScript expression; return the JSON result. |
+| `wait_for_network_idle` | Wait until no in-flight requests for the idle window (event-driven). |
+
+**Captcha (non-default, external-solver pipelines only)**: `capture_captcha`, `solve_captcha`, `inject_captcha_token` exist but aren't the normal path -- VoidCrawl passes or surfaces captchas, it doesn't solve them. See [Captcha handling](/voidcrawl/guides/captcha-handling/).
+
+### When to reach for click_visual_coords
+
+React and similar frameworks install event listeners that only fire on real trusted browser input. A CDP selector-based click calls `HTMLElement.click()`, which bypasses React's synthetic event system, and nothing happens. `click_visual_coords` dispatches a real `mousePressed` / `mouseReleased` pair at the given coordinates, so the page sees it as a genuine user click.
+
+Rule of thumb: if `click` succeeds but the page does not react, screenshot, eyeball the coords, and switch to `click_visual_coords`.
+
+<Aside type="note">
+Visual coords are in **CSS pixels**. On HiDPI displays the screenshot bitmap is larger than the CSS viewport. Divide bitmap coordinates by `window.devicePixelRatio` before calling `click_visual_coords`, or the click will land in the wrong place.
+</Aside>
+
+### Navigating by accessibility role
+
+`session_ax_tree` and `click_by_role` let an agent drive a page through its semantic structure rather than its markup. Call `session_ax_tree` to read the page as an indented `role "name"` outline, then `click_by_role` to act on a control by what it is:
+
+```text
+session_ax_tree { "session_id": "...", "mode": "compact" }
+  -> document
+       main
+         button "Load more"
+         link "Next page"
+
+click_by_role { "session_id": "...", "role": "button", "name": "Load more" }
+```
+
+This survives redesigns that rewrite class names and wrappers, which is where CSS selectors break. It is flakier when accessible names are ambiguous, localized, or duplicated, so the response includes `named_count` against `node_count`: a low ratio means a thin AX tree, and the agent should fall back to `extract` (CSS), a `screenshot`, or `click_visual_coords`. When several controls share a role and name, pass `nth` (zero-based) to pick one. The [Accessibility Tree guide](/voidcrawl/guides/accessibility-tree/) covers the model in full.
+
+## Pinning to a Chrome profile
+
+By default the server launches a fresh headless Chrome per run. Point it at an existing warm profile (logged into LinkedIn, Reddit, or similar) with either a flag or an env var:
+
+```sh
+voidcrawl-mcp --profile "Profile 1"
+# or
+VOIDCRAWL_PROFILE="Profile 1" voidcrawl-mcp
+```
+
+<Aside type="caution">
+Exactly one process can hold a profile lease at a time. If another `voidcrawl-mcp` (or a Python `with_profile(...)` caller) already owns it, startup fails with `ProfileBusy`. Close the other session first. See the [Profiles guide](/voidcrawl/guides/profiles/) for the full lease model.
+</Aside>
+
+### Why the agent can't switch profiles
+
+Profile management is intentionally **not exposed to MCP clients**: there is no `list_profiles` or `acquire_profile` tool. The reason is least privilege, not just a smaller blast radius. A Chrome profile is a live authenticated session (cookies, OAuth tokens, saved logins), and an agent that could enumerate and switch profiles at runtime could hop into any identity on the machine (your email, your bank) and exfiltrate it through a single prompt injection. So the launcher grants exactly one profile and the agent drives whatever Chrome you handed it.
+
+That means **rotation is an operator or Python-caller action, not something the agent does mid-session.** When a tool call returns `CaptchaDetected` (or you otherwise need a different identity or IP), the recovery loop lives outside the agent:
+
+- **Relaunch** the server pinned to a different warm profile.
+- **Go headful** with `CHROME_HEADLESS=0` to clear managed Turnstile (often passes with no rotation; see [Captcha handling](/voidcrawl/guides/captcha-handling/)).
+- **Swap the proxy** to a cleaner IP.
+
+A Python orchestrator can drive that loop programmatically with [`with_profile(...)`](/voidcrawl/guides/profiles/) across runs, leasing a fresh profile per attempt. VoidCrawl is the detector; your pipeline is the recovery mechanism.
+
+## Typed errors
+
+Tool failures come back as MCP error responses with a structured `data` envelope so your agent middleware can dispatch cleanly:
+
+```json
+{
+  "code": -32001,
+  "message": "captcha detected: recaptcha",
+  "data": {
+    "exception": "CaptchaDetected",
+    "kind": "recaptcha"
+  }
+}
+```
+
+Known exception values: `CaptchaDetected`, `ProfileBusy`, `ProfileLeaseExpired`, `ProfileNotFound`, plus the standard `VoidCrawlError` for everything else. See [Captcha handling](/voidcrawl/guides/captcha-handling/) for the rotation pattern.
+
+## Next steps
+
+<Card title="Skill file for Claude Code" icon="document">
+  Drop `.claude/skills/voidcrawl.md` into your project for recipes the model can reference: when to use `wait_for_network_idle` vs. `wait_for`, the `click_visual_coords` flow, and captcha hygiene. Shipped with the `voidcrawl-mcp` wheel.
+</Card>
+
+## FAQs
+
+<details>
+<summary>What is voidcrawl-mcp?</summary>
+
+A stdio Model Context Protocol server that exposes VoidCrawl's browser automation primitives (navigate, click, screenshot, `eval_js`, and more) as tools an AI agent can call. It reuses the same Rust core as the Python SDK, so tab recycling, stealth, and concurrent pooling all work automatically.
+
+</details>
+
+<details>
+<summary>How do I install voidcrawl-mcp?</summary>
+
+Pick one: `uv tool install voidcrawl-mcp`, `pipx install voidcrawl-mcp`, or `cargo install --git https://github.com/CascadingLabs/VoidCrawl voidcrawl-mcp`. After install, wire it into `.mcp.json` as a command entry.
+
+</details>
+
+<details>
+<summary>Why does the MCP server expose click_visual_coords as a first-class tool?</summary>
+
+React and similar frameworks install event listeners that only fire on real trusted browser input. A CDP selector-based click calls `HTMLElement.click()`, which bypasses React's synthetic event system and silently does nothing. `click_visual_coords` dispatches a real `mousePressed` / `mouseReleased` pair at given `(x, y)` coordinates so the page sees a genuine user click.
+
+</details>
+
+<details>
+<summary>Can an AI agent list or switch Chrome profiles at runtime?</summary>
+
+No, by design. There is no `list_profiles` or `acquire_profile` tool on the server. The reason is least privilege, not just a smaller blast radius: a Chrome profile is a live authenticated session (cookies, OAuth tokens, saved logins), so an agent that could enumerate and switch profiles at runtime could hop into any identity on the machine (your email, your bank) and exfiltrate it through a single prompt injection. The launcher grants exactly one profile, pinned with `--profile "Profile 1"` or `VOIDCRAWL_PROFILE=...`, and the agent drives whatever Chrome you handed it.
+
+Rotation is therefore an operator or Python-caller action between runs, not something the agent does mid-session. When a tool call returns `CaptchaDetected` and you need a different identity or IP, relaunch pinned to a different warm profile, go headful with `CHROME_HEADLESS=0`, or swap the proxy. A Python orchestrator can drive that loop with [`with_profile(...)`](/voidcrawl/guides/profiles/). See [Captcha handling](/voidcrawl/guides/captcha-handling/) for the full pattern.
+
+</details>
+
+<details>
+<summary>How does the MCP server report a captcha wall?</summary>
+
+Every tool call that hits a captcha returns an MCP error with code `-32001`, a human-readable message, and a structured `data` envelope: `{ "exception": "CaptchaDetected", "kind": "recaptcha" }`. Client middleware can dispatch on `data.exception` without string-matching the message.
+
+</details>
+
+<details>
+<summary>Does voidcrawl-mcp work with Cursor or custom MCP clients?</summary>
+
+Yes. It is a standard stdio MCP server. Any client that speaks the Model Context Protocol can launch it. Claude Code is the reference target because the recipes in the voidcrawl Skill file are tuned for it.
+
+</details>
+
+<details>
+<summary>When should an agent use click_by_role instead of click?</summary>
+
+When the page has clear accessibility semantics but volatile markup. A role plus accessible name like `button "Load more"` survives redesigns that rewrite class names and break CSS selectors. Call `session_ax_tree` first to see the available roles and names, and fall back to `click` (CSS) or `click_visual_coords` when a name is ambiguous or the AX tree is thin. See the [Accessibility Tree guide](/voidcrawl/guides/accessibility-tree/).
+
+</details>
+
+<details>
+<summary>What do node_count and named_count in session_ax_tree mean?</summary>
+
+`node_count` is the total accessibility nodes the browser returned; `named_count` is how many carry a non-empty accessible name. A low `named_count` relative to `node_count` signals a thin AX tree, so an agent should fall back to HTML `extract`, a `screenshot`, or CSS selectors rather than rely on `click_by_role`.
+
+</details>
+
+## References
+
+△ **Model Context Protocol**. Anthropic. *Official MCP specification and ecosystem documentation.* https://modelcontextprotocol.io/
+
+○ **VoidCrawl**. CascadingLabs. *VoidCrawl source repository on GitHub.* https://github.com/CascadingLabs/VoidCrawl
+
+◑ **Claude Code MCP**. Anthropic. *MCP configuration guide for Claude Code.* https://docs.claude.com/en/docs/claude-code/mcp
+
+◐ **chromiumoxide**. mattsse. *Async Rust CDP client used as VoidCrawl's browser driver.* https://github.com/mattsse/chromiumoxide
+
+◇ **WAI-ARIA 1.2**. W3C. *Roles and accessible names behind session_ax_tree and click_by_role.* https://www.w3.org/TR/wai-aria-1.2/
