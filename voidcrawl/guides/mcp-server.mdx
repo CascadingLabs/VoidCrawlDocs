@@ -218,6 +218,15 @@ Launch the host in that directory and the tools below are available immediately.
 
 **Captcha (non-default, external-solver pipelines only)**: `capture_captcha`, `solve_captcha`, `inject_captcha_token` exist but aren't the normal path -- VoidCrawl passes or surfaces captchas, it doesn't solve them. See [Captcha handling](/voidcrawl/guides/captcha-handling/).
 
+**Download (opt-in).** Hidden unless the server runs with `VOIDCRAWL_ALLOW_DOWNLOADS=1`. Each tool fetches a file through stealth Chrome into a quarantine dir, runs it through the built-in antivirus gate, and moves it into `output_dir` only if it comes back clean.
+
+| Tool | Purpose |
+|---|---|
+| `download` | Download a file **by URL** and scan it. Use instead of `fetch` when you need the bytes, not rendered HTML. Returns `{ok, verdict, path?, reason?, detected_mime, size}`. |
+| `download_arm` / `download_wait` | Capture a download started by a **page action** with no stable URL (e.g. Google Drive's "Download"): arm the session, click the button, then wait. |
+
+A `clean` verdict means the file passed the size + content-type + bundled-signature checks, not that it is guaranteed malware-free. See the [File Downloads guide](/voidcrawl/guides/downloads/) for the quarantine model and the Python API.
+
 ### When to reach for click_visual_coords
 
 React and similar frameworks install event listeners that only fire on real trusted browser input. A CDP selector-based click calls `HTMLElement.click()`, which bypasses React's synthetic event system, and nothing happens. `click_visual_coords` dispatches a real `mousePressed` / `mouseReleased` pair at the given coordinates, so the page sees it as a genuine user click.

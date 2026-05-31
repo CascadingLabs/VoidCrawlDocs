@@ -1,0 +1,245 @@
+---
+title: File Downloads
+description: Pull the actual bytes of a file through stealth Chrome and scan them with a built-in antivirus gate before you trust them. Opt-in, quarantine-first.
+faqs:
+  - q: How do I enable file downloads?
+    a: >-
+      Downloads are opt-in. The MCP download tools stay hidden unless the server is
+      launched with VOIDCRAWL_ALLOW_DOWNLOADS=1. The Python Page.download API is always
+      available, but you should still treat the target directory as quarantine and run
+      scan_file on the result before trusting it.
+  - q: What does a clean verdict actually guarantee?
+    a: >-
+      That the file passed three checks: it stayed under the size cap, its magic bytes
+      are not a recognized executable hiding under a benign Content-Type (so an .exe
+      served as application/pdf is caught, though a clean verdict does not certify the
+      bytes match the claimed type in general), and it did not match any bundled yara-x
+      signature. It is NOT a malware-free guarantee. The bundled rule set is small (it
+      ships an EICAR test rule). Real signature-database scanning via clamd is a planned
+      opt-in.
+  - q: Why download through the page instead of a plain HTTP GET?
+    a: >-
+      So the fetch carries the tab's cookies and TLS/Client-Hints fingerprint. A file
+      behind a login or a bot wall downloads the same way the browser would, and
+      Content-Disposition: inline resources like PDFs download instead of rendering in
+      Chrome's viewer. VoidCrawl forces the download from inside the page via a
+      same-origin fetch to a blob to a download anchor.
+  - q: How do I download a file that has no stable URL, like a Google Drive button?
+    a: >-
+      Use the action-triggered flow. Arm the session with download_arm (or the
+      capture_download context manager in Python), perform the click that starts the
+      download, then call download_wait. The scanner still runs, but the Content-Type
+      disguise check is skipped because no Content-Type header is observed on an
+      action download.
+  - q: What stops a hostile server from filling my disk?
+    a: >-
+      A size cap (default 100 MiB, override with max_bytes). The download stream aborts
+      the moment it crosses the cap, so the tab cannot be exhausted, and the partial
+      file never leaves quarantine.
+  - q: Does a flagged file stay on disk?
+    a: >-
+      No. A flagged file is deleted from quarantine and never reaches your output
+      directory. The result comes back with ok=false, verdict="flagged", and a reason.
+references:
+  - title: "YARA-X (Rust rewrite of YARA)"
+    url: https://virustotal.github.io/yara-x/
+  - title: "infer (Rust magic-byte type detection)"
+    url: https://docs.rs/infer/
+  - title: "EICAR standard anti-malware test file"
+    url: https://www.eicar.org/download-anti-malware-testfile/
+  - title: "Chrome DevTools Protocol: Browser.setDownloadBehavior"
+    url: https://chromedevtools.github.io/devtools-protocol/tot/Browser/#method-setDownloadBehavior
+  - title: "ClamAV / clamd daemon"
+    url: https://docs.clamav.net/manual/Usage/Scanning.html
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Sometimes you need the *bytes* of a file, not the rendered page: a PDF prospectus, a CSV export, a ZIP archive behind a login. VoidCrawl can pull those through the same stealth browser context it uses for everything else, then run them through a built-in **antivirus gate** before they ever reach a directory you trust.
+
+The model is **quarantine-first**: the file lands in a temporary quarantine directory, gets scanned, and is promoted into your output directory only if it comes back clean. A flagged file is deleted on the spot.
+
+<Aside type="caution">
+Downloads pull **untrusted bytes to disk over a live, authenticated browser session**. They are **opt-in**: the MCP download tools are hidden unless the server is started with `VOIDCRAWL_ALLOW_DOWNLOADS=1`. The Python API is always available, but you are responsible for scanning before you trust the file.
+</Aside>
+
+## Why download through the page
+
+A plain HTTP `GET` from your script doesn't carry the tab's cookies or its TLS / Client-Hints fingerprint, so files behind a login or a bot wall fail. VoidCrawl forces the download from **inside the page** (a same-origin `fetch` → `blob` → download anchor), so:
+
+- the request looks exactly like the browser making it (cookies + fingerprint preserved);
+- `Content-Disposition: inline` resources like PDFs **download** instead of rendering in Chrome's PDF viewer;
+- the in-page fetch **aborts past the size cap**, so a hostile server can't exhaust the tab (a *native* action-triggered download can't be aborted mid-stream, so there the oversized file is deleted *after* it lands; see [action downloads](#action-triggered-downloads));
+- the CDP download behavior is **reset before the pooled tab is recycled**, so no armed state leaks to the next caller.
+
+## The antivirus gate
+
+Every downloaded file passes through the `scanner` module before it is trusted. Three checks, in order:
+
+| Check | What it catches |
+|---|---|
+| **Size cap** | Oversized payloads (default 100 MiB). The in-page fetch aborts past `max_bytes`; a native action download is deleted after it lands if it's over. |
+| **Magic-byte type check** ([`infer`](https://docs.rs/infer/)) | An **executable hiding under a benign `Content-Type`**. The server's *claimed* `Content-Type` is fed in, so an `.exe` served as `application/pdf` is flagged. It does *not* certify that the bytes match the claimed type in general, only that a recognized executable isn't masquerading as a document. |
+| **Signature scan** ([`yara-x`](https://virustotal.github.io/yara-x/)) | Files matching a bundled rule. Ships an EICAR test rule today. |
+
+<Aside type="note">
+A **`clean` verdict means the file passed the size + disguised-executable + signature checks, not that it is guaranteed malware-free.** The bundled rule set is intentionally small. Real signature-database scanning via [`clamd`](https://docs.clamav.net/manual/Usage/Scanning.html) is a planned opt-in.
+</Aside>
+
+## From an MCP client
+
+When the server runs with `VOIDCRAWL_ALLOW_DOWNLOADS=1`, three tools appear. The `download` tool is the integrated path: it fetches, scans, and (if clean) moves the file into `output_dir` in one call.
+
+| Tool | Purpose |
+|---|---|
+| `download` | Download a file **by URL** through stealth Chrome, scan it, and move it into `output_dir` if clean. Use instead of `fetch` when you need the bytes, not rendered HTML. |
+| `download_arm` | Arm an open session to capture the file produced by the **next** download-triggering action, for buttons with no stable URL (e.g. Google Drive's "Download"). |
+| `download_wait` | Wait for the armed download to land, scan it, and (if clean) move it into the output dir. Call after the click(s) that trigger it. |
+
+All three return the same shape:
+
+```json
+{
+  "url": "https://example.com/prospectus.pdf",
+  "ok": true,
+  "verdict": "clean",
+  "path": "/.../voidcrawl-downloads/prospectus.pdf",
+  "reason": null,
+  "detected_mime": "application/pdf",
+  "size": 482113,
+  "waited_ms": 12
+}
+```
+
+`ok` is `true` **only** when the file passed every check and is on disk at `path`. A flagged file comes back with `ok=false`, `verdict="flagged"`, a `reason`, and `path=null` (the file was deleted). `waited_ms` is how long the call queued for a free pool tab, and is always `0` for `download_wait`, whose session tab is already open; that path also reports `url` as `session:<id>` rather than a file URL.
+
+Action-triggered flow (Google Drive style):
+
+```text
+session_open → session_navigate → download_arm
+  → click_by_role("button", "Download")
+  → click_by_role("button", "Download anyway")   # if an interstitial appears
+  → download_wait
+```
+
+<Aside type="note">
+On action downloads **no `Content-Type` header is observed**, so the magic-byte *disguise* check can't run; the size cap and signature scan still do. The size cap is also enforced *after* the file lands here (Chrome streams a native download straight to disk and can't be aborted mid-stream), so an oversized file is written to quarantine and then deleted rather than aborted in flight. Treat a `clean` verdict from `download_wait` accordingly.
+</Aside>
+
+## From Python
+
+The Python API is lower-level and explicit: `Page.download()` fetches into a directory you treat as quarantine, and you call `scan_file()` yourself before trusting it.
+
+```python
+import tempfile
+from pathlib import Path
+
+from voidcrawl import BrowserPool, PoolConfig, scan_file
+
+async with BrowserPool(PoolConfig()) as pool:
+    async with pool.acquire() as tab:
+        await tab.goto("https://example.com/login")  # establish the session first
+        # ... authenticate ...
+
+        with tempfile.TemporaryDirectory() as quarantine:
+            outcome = await tab.download(
+                "https://example.com/report.pdf",
+                quarantine,
+                max_bytes=50 * 1024 * 1024,
+            )
+            report = scan_file(outcome.path, claimed_mime=outcome.content_type)
+            if report.is_clean:
+                Path(outcome.path).rename(Path("downloads") / "report.pdf")
+            else:
+                print(f"rejected: {report.reason}")
+```
+
+`DownloadOutcome` carries `path`, `bytes`, and `content_type` (the server's `Content-Type`, parameters stripped; pass it to `scan_file` as `claimed_mime`). `ScanReport` carries `verdict`, `is_clean`, `reason`, `detected_mime`, and `size`. There's also `scan_bytes(data, ...)` for an in-memory buffer.
+
+### Action-triggered downloads
+
+For a download started by a page action rather than a URL, bracket it with the `capture_download` context manager, which gives you the Playwright `expect_download` shape. Trigger the download *inside* the block; the file is awaited on a clean exit:
+
+```python
+import tempfile
+
+from voidcrawl import capture_download, scan_file
+
+with tempfile.TemporaryDirectory() as quarantine:
+    async with capture_download(tab, quarantine, timeout=90) as dl:
+        await tab.click_by_role("button", "Download")
+
+    outcome = dl.value  # DownloadOutcome
+    report = scan_file(outcome.path, claimed_mime=outcome.content_type)
+```
+
+Under the hood `capture_download` calls `tab.arm_download(dir, max_bytes)`, then `tab.wait_download(capture, timeout)` on exit; on an exception inside the block it calls `tab.reset_download()` so a pooled tab never returns to the pool still armed. You can call those three primitives directly if you need finer control.
+
+## Caveats at a glance
+
+- **Opt-in for MCP**: `VOIDCRAWL_ALLOW_DOWNLOADS=1` or the tools don't exist.
+- **`clean` ≠ malware-free**: it's a fast, conservative gate, not a full AV engine. `clamd` integration is planned.
+- **Action downloads skip the disguise check**: no `Content-Type` is observed, and the size cap is enforced after the file lands (deleted, not aborted mid-stream).
+- **The output directory is yours; quarantine is temporary**: VoidCrawl never leaves a flagged file behind.
+
+## FAQs
+
+<details>
+<summary>How do I enable file downloads?</summary>
+
+Downloads are opt-in. The MCP download tools stay hidden unless the server is launched with `VOIDCRAWL_ALLOW_DOWNLOADS=1`. The Python `Page.download` API is always available, but you should still treat the target directory as quarantine and run `scan_file` on the result before trusting it.
+
+</details>
+
+<details>
+<summary>What does a clean verdict actually guarantee?</summary>
+
+That the file passed three checks: it stayed under the size cap, its magic bytes are **not a recognized executable hiding under a benign `Content-Type`** (so an `.exe` served as `application/pdf` is caught, though a clean verdict does *not* certify the bytes match the claimed type in general), and it did not match any bundled `yara-x` signature. It is **not** a malware-free guarantee; the bundled rule set is small (it ships an EICAR test rule). Real signature-database scanning via `clamd` is a planned opt-in.
+
+</details>
+
+<details>
+<summary>Why download through the page instead of a plain HTTP GET?</summary>
+
+So the fetch carries the tab's cookies and TLS / Client-Hints fingerprint. A file behind a login or a bot wall downloads the same way the browser would, and `Content-Disposition: inline` resources like PDFs download instead of rendering in Chrome's viewer. VoidCrawl forces the download from inside the page via a same-origin `fetch` → `blob` → download anchor.
+
+</details>
+
+<details>
+<summary>How do I download a file that has no stable URL, like a Google Drive button?</summary>
+
+Use the action-triggered flow. Arm the session with `download_arm` (or the `capture_download` context manager in Python), perform the click that starts the download, then call `download_wait`. The scanner still runs, but the `Content-Type` disguise check is skipped because no `Content-Type` header is observed on an action download.
+
+</details>
+
+<details>
+<summary>What stops a hostile server from filling my disk?</summary>
+
+A size cap (default 100 MiB, override with `max_bytes`). The download stream aborts the moment it crosses the cap, so the tab cannot be exhausted, and the partial file never leaves quarantine.
+
+</details>
+
+<details>
+<summary>Does a flagged file stay on disk?</summary>
+
+No. A flagged file is deleted from quarantine and never reaches your output directory. The result comes back with `ok=false`, `verdict="flagged"`, and a `reason`.
+
+</details>
+
+## Related
+
+- [MCP Server](/voidcrawl/guides/mcp-server/#tools), wiring the server and the full tool map.
+- [Browser Pool](/voidcrawl/guides/browser-pool/), the pool the download runs on.
+- [API Reference](/voidcrawl/reference/api-reference/) for `Page.download`, `scan_file`, `scan_bytes`, `capture_download`, and the result types.
+
+## References
+
+△ **YARA-X**. VirusTotal. *The Rust YARA rewrite behind the signature scan.* https://virustotal.github.io/yara-x/
+
+○ **infer**. docs.rs. *Magic-byte file-type detection used for the content-type disguise check.* https://docs.rs/infer/
+
+◑ **EICAR test file**. EICAR. *The standard anti-malware test signature bundled as the default rule.* https://www.eicar.org/download-anti-malware-testfile/
+
+◐ **Browser.setDownloadBehavior**. Chrome DevTools Protocol. *The CDP method behind arming and resetting download capture.* https://chromedevtools.github.io/devtools-protocol/tot/Browser/#method-setDownloadBehavior
+
+◇ **clamd**. ClamAV. *The daemon a future opt-in will hand files to for full signature-DB scanning.* https://docs.clamav.net/manual/Usage/Scanning.html
