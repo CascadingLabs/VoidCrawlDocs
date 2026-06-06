@@ -1,0 +1,154 @@
+---
+title: Anti-Bot Vendors
+description: Detect which WAF, CDN, or anti-bot vendor is present on a response, and whether it is actively challenging you.
+faqs:
+  - q: Is vendor presence the same as being blocked?
+    a: >-
+      No. Presence means a vendor fronts the site. A challenge means the vendor is
+      actively walling the response. Rotate or escalate only on challenged verdicts.
+  - q: Where does the verdict appear?
+    a: >-
+      Python returns PageResponse.antibot. The MCP fetch, fetch_many, and
+      session_navigate tools include an antibot field when a vendor is detected.
+  - q: Why scan the body if headers are available?
+    a: >-
+      Some walls return status 200 and put the challenge in the HTML body. VoidCrawl
+      scans headers first, then a bounded 64 KiB body prefix to catch those without
+      regex-scanning full pages.
+  - q: What should I do with Cloudflare challenged=true?
+    a: >-
+      Try headful mode and a warm profile first. Managed Turnstile often needs a real
+      browser score. If that still fails, rotate IP or mark the URL uncrawlable.
+  - q: Does this solve captchas?
+    a: >-
+      No. This is triage. It tells you which wall is in front of the browser so your
+      pipeline can route deterministically.
+references:
+  - title: VoidCrawl anti-bot corpus
+    url: https://github.com/CascadingLabs/VoidCrawl/blob/main/crates/core/CORPUS.md
+  - title: Anti-bot detection example
+    url: https://github.com/CascadingLabs/VoidCrawl/blob/main/examples/antibot_detection.py
+---
+
+VoidCrawl annotates responses with the WAF, CDN, or anti-bot vendor it sees. The detector answers two questions:
+
+1. Which vendor is in front of this response?
+2. Is that vendor actively challenging the browser?
+
+That distinction is the whole feature. Cloudflare serving a normal page is not a problem. Cloudflare serving a Turnstile wall is.
+
+## Presence vs Challenge
+
+| Signal | Meaning | Action |
+|---|---|---|
+| Presence | A vendor fronts the site. Example: `server: cloudflare`. | Record telemetry. Do not rotate by default. |
+| Challenge | An active block or challenge fired. Example: Cloudflare challenge body, DataDome block, Akamai reference page. | Route, escalate, rotate, or abort. |
+
+Blind retry wastes profiles and proxies. Vendor detection gives the pipeline a reason to change tactics.
+
+## Where It Appears
+
+Python:
+
+```python
+resp = await page.goto("https://example.com")
+if resp.antibot and resp.antibot.challenged:
+    print(resp.antibot.challenge_vendor)
+```
+
+MCP:
+
+```json
+{
+  "url": "https://fortress.theplumber.dev/",
+  "status_code": 200,
+  "antibot": {
+    "vendors": ["cloudflare"],
+    "challenged": true,
+    "challenge_vendor": "cloudflare",
+    "corpus_version": "cl-2026.06.01",
+    "evidence": "body"
+  }
+}
+```
+
+The MCP field appears on `fetch`, `fetch_many`, and `session_navigate` when a vendor is detected.
+
+## Evidence Tiers
+
+VoidCrawl scans in two tiers.
+
+| Tier | What it reads | Why |
+|---|---|---|
+| Headers | Status and response headers. | Cheap and high signal for CDN and WAF presence. |
+| Body prefix | First 64 KiB of HTML. | Catches 200 responses that cloak the challenge in the body. |
+
+The verdict includes `evidence: "headers"` or `evidence: "body"` so callers know which tier matched.
+
+## Vendor Coverage
+
+The corpus covers the vendors VoidCrawl has seen in real work:
+
+- Cloudflare and Turnstile;
+- DataDome;
+- Akamai;
+- Imperva and Incapsula;
+- PerimeterX / HUMAN;
+- Kasada;
+- AWS WAF;
+- F5 BigIP;
+- Sucuri;
+- CloudFront;
+- reCAPTCHA and hCaptcha markers.
+
+The rules are small, reviewed, and versioned. Record `corpus_version` with captures. A verdict is a captured fact, not something to recompute later against a newer rule set.
+
+## Routing Policy
+
+Suggested routing:
+
+| Verdict | First move |
+|---|---|
+| `cloudflare` challenged | Headful plus warm profile. |
+| `datadome` challenged | Rotate to a cleaner proxy. |
+| `perimeterx` or `kasada` challenged | Headful, slower actions, warm profile, then proxy rotation. |
+| Presence only | Continue. Do not rotate. |
+
+This page documents the detection layer. Your crawler owns the routing policy.
+
+## FAQs
+
+<details>
+<summary>Is vendor presence the same as being blocked?</summary>
+
+No. Presence means a vendor fronts the site. A challenge means the vendor is actively walling the response.
+
+</details>
+
+<details>
+<summary>Where does the verdict appear?</summary>
+
+Python returns `PageResponse.antibot`. MCP returns `antibot` on `fetch`, `fetch_many`, and `session_navigate` when a vendor is detected.
+
+</details>
+
+<details>
+<summary>Why scan the body if headers are available?</summary>
+
+Some challenge pages return status 200 and hide the wall in the HTML. VoidCrawl scans a bounded body prefix to catch that case.
+
+</details>
+
+<details>
+<summary>What should I do with Cloudflare challenged=true?</summary>
+
+Try headful mode and a warm profile first. If that still fails, rotate IP or mark the URL uncrawlable.
+
+</details>
+
+<details>
+<summary>Does this solve captchas?</summary>
+
+No. This is triage. It tells your pipeline which wall is in front of the browser.
+
+</details>
