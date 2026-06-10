@@ -99,6 +99,46 @@ await page.delete_cookie("locale", domain="qscrape.dev")
 
 VoidCrawl ships built-in actions for capturing network requests using the browser's PerformanceObserver API. Install the observer after navigation -- it uses `buffered: true` to retroactively capture all resources from the current page load.
 
+### Capture the data-plane endpoint set in one shot
+
+If all you need is *which API endpoints the page talks to* -- for fingerprinting a template, discovering a backend JSON API, or recording provenance -- skip the observer and pass `capture_endpoints=True` to `goto`:
+
+```python
+import asyncio
+
+from voidcrawl import BrowserPool, PoolConfig
+
+
+async def main() -> None:
+    async with BrowserPool(PoolConfig()) as pool:
+        async with pool.acquire() as tab:
+            resp = await tab.goto("https://qscrape.dev", capture_endpoints=True)
+
+            print(f"sanitizer: {resp.endpoint_sanitizer_version}")
+            for ep in resp.endpoints:
+                print(f"  {ep}")
+            if resp.endpoints_truncated:
+                print("  ... endpoint cap hit, set truncated")
+
+
+asyncio.run(main())
+```
+
+This records every **XHR and Fetch** request URL seen during the load and returns them on `PageResponse.endpoints` as a sorted, deduplicated set of `scheme://host/path`. The capture is **redact-by-default at the source**:
+
+- Query strings, fragments, and userinfo are stripped before anything is stored.
+- Secret-looking path segments (long tokens, hex hashes, 9+-digit numbers, mixed-case IDs) are replaced with `:redacted`.
+- Non-HTTP schemes and local/private hosts (including IPv6 and CGNAT ranges) are dropped.
+- The set is capped (256 endpoints); `endpoints_truncated` tells you the cap was hit.
+
+`endpoint_sanitizer_version` names the redaction-rule version that produced the set -- store it alongside the endpoints if you replay or compare captures over time. `endpoints` is `None` unless you asked for capture, and `[]` when you asked but the page made no qualifying requests.
+
+<Card title="When to use which">
+
+`capture_endpoints` is the cheap, opt-in answer to "what endpoints does this page call" -- it only sees XHR/Fetch during `goto`, and the URLs come back sanitized. The PerformanceObserver recipes below see **all** resource types (images, scripts, stylesheets) with timing and size data, and return raw URLs.
+
+</Card>
+
 ### Log all request URLs during a page load
 
 ```python
@@ -339,6 +379,11 @@ async with pool.acquire() as tab:
 | `url` | `str` | Final URL after any redirects |
 | `status_code` | `int \| None` | HTTP status of the document response, or `None` when served from cache/service worker |
 | `redirected` | `bool` | `True` when at least one HTTP redirect occurred |
+| `headers` | `dict[str, str]` | Final document response headers (lowercased names) |
+| `antibot` | `AntibotVerdict \| None` | Anti-bot / CDN vendor fingerprint -- see [Anti-Bot Vendors](/voidcrawl/guides/anti-bot-vendors/) |
+| `endpoints` | `list[str] \| None` | Sanitized XHR/Fetch endpoint set; `None` unless `goto(..., capture_endpoints=True)` |
+| `endpoints_truncated` | `bool` | `True` when the endpoint set hit its cap |
+| `endpoint_sanitizer_version` | `str \| None` | Redaction-rule version that produced `endpoints` |
 
 `status_code` is `None` when the page was served from cache or a service worker (no network response):
 

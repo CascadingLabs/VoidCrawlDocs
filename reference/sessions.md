@@ -16,7 +16,7 @@ acquires near-instant.  Tabs are hard-recycled after
 `PoolConfig.tab_max_idle_secs` of inactivity.
 **Args:**
 
-- `config` `PoolConfig` — Pool sizing and browser launch options.
+- `config` `PoolConfig` -- Pool sizing and browser launch options.
 
 ### `acquire` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/__init__.py#L613" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -26,7 +26,7 @@ Check out a tab from the pool as an async context manager.
 
 The tab is automatically returned to the pool when the context
 exits, even on exception.
-**Returns:** `_AcquireContext` — An async context manager yielding a `PooledTab`.
+**Returns:** `_AcquireContext` -- An async context manager yielding a `PooledTab`.
 
 ### `warmup` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/__init__.py#L630" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -46,7 +46,7 @@ connected to, if `BrowserConfig.ws_url` is set); on exit the
 process is terminated and resources are freed.
 **Args:**
 
-- `config` `BrowserConfig | None` — Browser launch options.  Defaults to
+- `config` `BrowserConfig | None` -- Browser launch options.  Defaults to
 ``BrowserConfig()`` (headless + stealth).
 
 ### `close` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/__init__.py#L530" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
@@ -70,16 +70,16 @@ triggers interactive step-debugging when passed to
 `voidcrawl.actions.Flow.run`.
 **Args:**
 
-- `url` `str` — The URL to load in the new tab.
+- `url` `str` -- The URL to load in the new tab.
 
-**Returns:** `Page` — The new tab handle (or a debug wrapper when ``debug=True``).
+**Returns:** `Page` -- The new tab handle (or a debug wrapper when ``debug=True``).
 
 ### `version` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/__init__.py#L520" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
 `version() -> str`
 
 Return the browser version string (e.g. ``"Chrome/126.0.6478.126"``).
-**Returns:** `str` — The Chrome/Chromium product version reported by the browser.
+**Returns:** `str` -- The Chrome/Chromium product version reported by the browser.
 
 ## `Page` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L420" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -93,8 +93,8 @@ Arm an action-triggered download capture into *dir*.
 
 Perform the triggering action next (e.g. `click_by_role`), then
 pass the returned capture to `wait_download`. Use for downloads
-started by a page action — a "Download" button, a generated/cross-origin
-URL (Google Drive) — rather than `download`, which needs a URL.
+started by a page action -- a "Download" button, a generated/cross-origin
+URL (Google Drive) -- rather than `download`, which needs a URL.
 `voidcrawl.capture_download` brackets these as a context manager.
 
 ### `ax_tree_outline` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L531" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
@@ -117,9 +117,9 @@ tree, bridges to the DOM, scrolls into view, and clicks. Raises if no
 such node exists.
 **Args:**
 
-- `role` `str` — Computed accessibility role, e.g. ``"button"``, ``"link"``.
-- `name` `str` — Computed accessible name (exact match).
-- `nth` `int` — 0-based index when several nodes match.
+- `role` `str` -- Computed accessibility role, e.g. ``"button"``, ``"link"``.
+- `name` `str` -- Computed accessible name (exact match).
+- `nth` `int` -- 0-based index when several nodes match.
 
 ### `click_element` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L582" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -152,7 +152,7 @@ Delete a cookie by name, optionally scoped to a domain and path.
 Probe DOM for captcha / bot-wall markers.
 
 Returns one of ``"recaptcha"``, ``"hcaptcha"``, ``"turnstile"``,
-``"cloudflare_challenge"``, ``"datadome"`` — or ``None``.
+``"cloudflare_challenge"``, ``"datadome"`` -- or ``None``.
 
 ### `dispatch_key_event` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L634" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -178,16 +178,16 @@ the result to `scan_file` before trusting the file. The CDP
 download behavior is reset before this returns.
 **Args:**
 
-- `url` `str` — Absolute URL of the file to download.
-- `dir` `str` — Directory the file is saved into.
-- `timeout` `float` — Download timeout in seconds.
-- `max_bytes` `int | None` — Abort past this many bytes (default 100 MiB).
+- `url` `str` -- Absolute URL of the file to download.
+- `dir` `str` -- Directory the file is saved into.
+- `timeout` `float` -- Download timeout in seconds.
+- `max_bytes` `int | None` -- Abort past this many bytes (default 100 MiB).
 
 ### `eval_js` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L444" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
 `eval_js(expression: str) -> object`
 
-Alias for `evaluate_js` — short form used by MCP tooling.
+Alias for `evaluate_js` -- short form used by MCP tooling.
 
 ### `evaluate_js` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L441" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -213,7 +213,7 @@ AX node dicts linked by ``childIds``/``parentId``; each node carries
 ``backendDOMNodeId``. Call after the page has rendered.
 **Args:**
 
-- `depth` `int | None` — Maximum descendant depth to traverse. ``None`` returns the
+- `depth` `int | None` -- Maximum descendant depth to traverse. ``None`` returns the
 whole tree.
 
 ### `goto` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L423" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
@@ -270,9 +270,9 @@ release an armed-but-unused capture (e.g. on an error path).
 Capture a PNG screenshot with optional disk output and/or crop.
 **Args:**
 
-- `path` `str | None` — If set, writes PNG to this path and returns the path.
+- `path` `str | None` -- If set, writes PNG to this path and returns the path.
 If omitted, returns raw bytes.
-- `bbox` `tuple[int, int, int, int] | None` — Optional ``(x, y, width, height)`` in CSS pixels.
+- `bbox` `tuple[int, int, int, int] | None` -- Optional ``(x, y, width, height)`` in CSS pixels.
 
 ### `screenshot_png` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L447" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -354,18 +354,18 @@ Wait for network activity to settle.
 
 `wait_for_selector(selector: str, timeout: float = 30.0) -> None`
 
-Wait until a CSS selector matches. Event-driven — no polling.
+Wait until a CSS selector matches. Event-driven -- no polling.
 
 ## `PooledTab` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L91" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
 A tab checked out from a `voidcrawl.BrowserPool`.
 
 Exposes the same page-interaction methods as `Page` but must
-not be closed manually — return it to the pool via the async context
+not be closed manually -- return it to the pool via the async context
 manager or `voidcrawl.BrowserPool.release`.
 **Attributes:**
 
-- `use_count` `int` — How many times this tab has been acquired (0 on first use).
+- `use_count` `int` -- How many times this tab has been acquired (0 on first use).
 
 ### `arm_download` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L157" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -393,9 +393,9 @@ tree, bridges to the DOM, scrolls into view, and clicks. Raises if no
 such node exists.
 **Args:**
 
-- `role` `str` — Computed accessibility role, e.g. ``"button"``, ``"link"``.
-- `name` `str` — Computed accessible name (exact match).
-- `nth` `int` — 0-based index when several nodes match.
+- `role` `str` -- Computed accessibility role, e.g. ``"button"``, ``"link"``.
+- `name` `str` -- Computed accessible name (exact match).
+- `nth` `int` -- 0-based index when several nodes match.
 
 ### `click_element` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L244" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -404,7 +404,7 @@ such node exists.
 Click the first element matching *selector*.
 **Args:**
 
-- `selector` `str` — CSS selector string.
+- `selector` `str` -- CSS selector string.
 
 ### `content` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L126" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -419,9 +419,9 @@ Return the full page HTML (``document.documentElement.outerHTML``).
 Delete a cookie by name, optionally scoped to a domain and path.
 **Args:**
 
-- `name` `str` — Cookie name.
-- `domain` `str | None` — Cookie domain.
-- `path` `str | None` — Cookie path.
+- `name` `str` -- Cookie name.
+- `domain` `str | None` -- Cookie domain.
+- `path` `str | None` -- Cookie path.
 
 ### `dispatch_key_event` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L352" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -430,11 +430,11 @@ Delete a cookie by name, optionally scoped to a domain and path.
 Send a low-level CDP ``Input.dispatchKeyEvent``.
 **Args:**
 
-- `event_type` `str` — ``"keyDown"``, ``"keyUp"``, ``"rawKeyDown"``, or ``"char"``.
-- `key` `str | None` — DOM ``KeyboardEvent.key`` value (e.g. ``"Enter"``).
-- `code` `str | None` — Physical key code (e.g. ``"KeyA"``).
-- `text` `str | None` — Character to insert (e.g. ``"a"``).
-- `modifiers` `int | None` — Bit field for modifier keys.
+- `event_type` `str` -- ``"keyDown"``, ``"keyUp"``, ``"rawKeyDown"``, or ``"char"``.
+- `key` `str | None` -- DOM ``KeyboardEvent.key`` value (e.g. ``"Enter"``).
+- `code` `str | None` -- Physical key code (e.g. ``"KeyA"``).
+- `text` `str | None` -- Character to insert (e.g. ``"a"``).
+- `modifiers` `int | None` -- Bit field for modifier keys.
 
 ### `dispatch_mouse_event` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L327" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -443,15 +443,15 @@ Send a low-level CDP ``Input.dispatchKeyEvent``.
 Send a low-level CDP ``Input.dispatchMouseEvent``.
 **Args:**
 
-- `event_type` `str` — One of ``"mousePressed"``, ``"mouseReleased"``,
+- `event_type` `str` -- One of ``"mousePressed"``, ``"mouseReleased"``,
 ``"mouseMoved"``, or ``"mouseWheel"``.
-- `x` `float` — Horizontal page coordinate.
-- `y` `float` — Vertical page coordinate.
-- `button` `str` — ``"left"``, ``"right"``, or ``"middle"``.
-- `click_count` `int` — Number of clicks (usually ``1``).
-- `delta_x` `float | None` — Horizontal scroll delta (``mouseWheel`` only).
-- `delta_y` `float | None` — Vertical scroll delta (``mouseWheel`` only).
-- `modifiers` `int | None` — Bit field for modifier keys (Ctrl=1, Shift=2, etc.).
+- `x` `float` -- Horizontal page coordinate.
+- `y` `float` -- Vertical page coordinate.
+- `button` `str` -- ``"left"``, ``"right"``, or ``"middle"``.
+- `click_count` `int` -- Number of clicks (usually ``1``).
+- `delta_x` `float | None` -- Horizontal scroll delta (``mouseWheel`` only).
+- `delta_y` `float | None` -- Vertical scroll delta (``mouseWheel`` only).
+- `modifiers` `int | None` -- Bit field for modifier keys (Ctrl=1, Shift=2, etc.).
 
 ### `download` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L148" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -463,7 +463,7 @@ Download *url* into directory *dir*; see `Page.download`.
 
 `eval_js(expression: str) -> object`
 
-Alias for `evaluate_js` — short form used by MCP tooling.
+Alias for `evaluate_js` -- short form used by MCP tooling.
 
 ### `evaluate_js` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L135" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -472,7 +472,7 @@ Alias for `evaluate_js` — short form used by MCP tooling.
 Evaluate a JavaScript *expression* and return the result.
 **Args:**
 
-- `expression` `str` — JavaScript expression or IIFE string.
+- `expression` `str` -- JavaScript expression or IIFE string.
 
 ### `get_cookies` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L266" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -495,7 +495,7 @@ AX node dicts linked by ``childIds``/``parentId``; each node carries
 ``backendDOMNodeId``. Call after the page has rendered.
 **Args:**
 
-- `depth` `int | None` — Maximum descendant depth to traverse. ``None`` returns the
+- `depth` `int | None` -- Maximum descendant depth to traverse. ``None`` returns the
 whole tree.
 
 ### `goto` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L104" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
@@ -505,10 +505,10 @@ whole tree.
 Navigate to *url* and wait for network idle in one shot.
 **Args:**
 
-- `url` `str` — The URL to load.
-- `timeout` `float` — Maximum seconds to wait for network idle.
+- `url` `str` -- The URL to load.
+- `timeout` `float` -- Maximum seconds to wait for network idle.
 
-**Returns:** `PageResponse` — class:`PageResponse` with HTML, final URL, status code, `PageResponse` — and redirect flag.
+**Returns:** `PageResponse` -- class:`PageResponse` with HTML, final URL, status code, `PageResponse` -- and redirect flag.
 
 ### `navigate` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L116" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -517,7 +517,7 @@ Navigate to *url* and wait for network idle in one shot.
 Navigate to *url* without waiting for any load event.
 **Args:**
 
-- `url` `str` — The URL to load.
+- `url` `str` -- The URL to load.
 
 ### `query_ax_tree` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L192" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -536,7 +536,7 @@ exact. Passing neither returns every node under the document root.
 Return the inner HTML of the first element matching *selector*, or ``None``.
 **Args:**
 
-- `selector` `str` — CSS selector string.
+- `selector` `str` -- CSS selector string.
 
 ### `query_selector_all` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L237" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -545,7 +545,7 @@ Return the inner HTML of the first element matching *selector*, or ``None``.
 Return the inner HTML of every element matching *selector*.
 **Args:**
 
-- `selector` `str` — CSS selector string.
+- `selector` `str` -- CSS selector string.
 
 ### `reset_download` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L169" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -566,12 +566,12 @@ Capture a full-page screenshot as PNG bytes.
 Set a cookie on the current page.
 **Args:**
 
-- `name` `str` — Cookie name.
-- `value` `str` — Cookie value.
-- `domain` `str | None` — Cookie domain (default: current page domain).
-- `path` `str | None` — Cookie path.
-- `secure` `bool | None` — Mark as Secure.
-- `http_only` `bool | None` — Mark as HttpOnly.
+- `name` `str` -- Cookie name.
+- `value` `str` -- Cookie value.
+- `domain` `str | None` -- Cookie domain (default: current page domain).
+- `path` `str | None` -- Cookie path.
+- `secure` `bool | None` -- Mark as Secure.
+- `http_only` `bool | None` -- Mark as HttpOnly.
 
 ### `set_geolocation` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L215" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -589,7 +589,7 @@ localhost), not ``data:`` URLs. ``accuracy`` defaults to 50 metres.
 Set extra HTTP headers for all subsequent requests from this tab.
 **Args:**
 
-- `headers` `dict[str, str]` — Header name-value pairs.
+- `headers` `dict[str, str]` -- Header name-value pairs.
 
 ### `set_locale` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L224" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -616,8 +616,8 @@ Return the document title, or ``None``.
 Focus the first element matching *selector* and type *text*.
 **Args:**
 
-- `selector` `str` — CSS selector string.
-- `text` `str` — The text to type.
+- `selector` `str` -- CSS selector string.
+- `text` `str` -- The text to type.
 
 ### `url` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L132" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
@@ -644,15 +644,15 @@ Block until the current navigation completes.
 Wait for network activity to settle.
 **Args:**
 
-- `timeout` `float` — Maximum seconds to wait.
+- `timeout` `float` -- Maximum seconds to wait.
 
-**Returns:** `str | None` — ``"networkIdle"`` or ``"networkAlmostIdle"`` on success, `str | None` — ``None`` on timeout.
+**Returns:** `str | None` -- ``"networkIdle"`` or ``"networkAlmostIdle"`` on success, `str | None` -- ``None`` on timeout.
 
 ### `wait_for_selector` <a href="https://github.com/CascadingLabs/VoidCrawl/blob/v0.3.4/voidcrawl/_ext.pyi#L320" target="_blank" rel="noopener noreferrer" title="View source on GitHub"><svg aria-hidden="true" height="14" viewBox="0 0 16 16" version="1.1" width="14" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-2px;display:inline-block"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
 
 `wait_for_selector(selector: str, timeout: float = 30.0) -> None`
 
-Wait until a CSS selector matches. Event-driven — no polling.
+Wait until a CSS selector matches. Event-driven -- no polling.
 
 Raises `VoidCrawlError` if *timeout* seconds elapse
 without a match.

@@ -1,0 +1,77 @@
+---
+title: "Fetch Signals for Fingerprinting -- State of Play"
+description: The network, cookie, and antibot signals VoidCrawl surfaces (and the one it doesn't yet) for Yosoi's L3 page-fingerprint layer, with the Linear tickets tracking them.
+status: state-of-play
+slug: design/fetch-signals-for-fingerprinting
+---
+
+> [!Note] This is a **factual snapshot** of the code + Linear, not a design proposal. It pairs with
+> Yosoi's *Page Identity & Reuse* state doc: that side consumes a page's shape; this side is the
+> behavioral (L3) signal that shape needs. Anything not under *What exists today* is not built.
+
+## Why VoidCrawl owns the L3 signal
+
+Yosoi recognizes a page by a layered fingerprint. The cheap layers (HTML skeleton, semantics) are
+easy to randomize; the adversary-costly layers only VoidCrawl can see during a render:
+
+- the **data-plane endpoint set** -- a Yahoo quote calls the same
+  `query1.finance.yahoo.com/v*/finance/quoteSummary/...` endpoints for every ticker and locale (a
+  near-perfect cross-instance invariant, visible only in the CDP network log);
+- the **response header-name** and **`Set-Cookie` name** sets (infra/CDN/framework signature);
+- the **antibot verdict + vendor**, including whether the page was *challenged* (a fingerprint flip
+  under a challenge is a cloaking event, not a template change).
+
+All content-invariant by nature -- paths/names/vendor, never values or bodies.
+
+## What exists today (code)
+
+- **Antibot detection (CAS-139, shipped).** `antibot.rs` header-first detector; the antibot verdict
+  and response **headers** are on `PageResponse`, exposed over PyO3 and MCP (`PyAntibotVerdict`).
+- **`network_capture`** exists as a standalone MCP tool.
+
+## Not surfaced yet (current gap)
+
+- There is **no data-plane endpoint set** on `PageResponse` -- the CDP network log is produced during
+  navigation and dropped before it reaches a result object.
+- The **voiddriver blind spot**: Yosoi's `voiddriver.py` calls `goto` for its side effect and re-reads
+  HTML via `content()`, discarding `goto`'s `PageResponse`. So even the already-shipped `headers` /
+  `antibot` never reach Yosoi's `FetchResult` -- which alone blocks Yosoi's existing L3-lite header
+  layer from being populated on browser-tier fetches.
+
+## Tracked in Linear -- CAS-169 (Backlog)
+
+[CAS-169](https://linear.app/cascadinglabs/issue/CAS-169) -- *VoidCrawl: capture data-plane network
+endpoint set (L3 fingerprint signal)* -- is the plan of record (designed by a 6-lens subagent panel:
+CDP impl, privacy/replay-grade, API boundary, Yosoi consumer, stealth/anti-bot, perf/pool). Summary
+of what it specifies:
+
+**Producer (VoidCrawl):**
+- Passive, stealth-safe capture: a function-local `EventRequestWillBeSent` listener (subscribed
+  before `goto`, dropped at return → no pool leak), filtered to `Xhr | Fetch`. No request
+  interception → no stealth regression.
+- Replay-grade, privacy-first capture shape: strip query/fragment/userinfo at the source; mechanical
+  secret redaction per path segment (version-stamped `ENDPOINT_SANITIZER_VERSION`); `http`/`https`
+  only, private hosts sentinelized; sorted+deduped set, capped (256 / 64 KiB) with an
+  `endpoints_truncated` flag.
+- Surface: `PageResponse.endpoints: Option<Vec<String>>` + `endpoints_truncated`; **opt-in** via a
+  `capture_endpoints` flag on `goto` (gates the subscription, so the wire cost is only paid on
+  request); PyO3 getter + `_ext.pyi` stub. Boundary: VoidCrawl emits PII-safe host+path (a generic
+  browser observation); Yosoi normalizes/templatizes/set-ifies.
+
+**Consumer (Yosoi), follow-on phase in the same ticket:**
+- Fix the voiddriver blind spot first (cheap): capture `goto`'s `PageResponse`, thread `headers` +
+  `antibot` + `endpoints` into `FetchResult`.
+- Add `network_endpoint_skeleton(endpoints)` as a **separate** L3 layer (sibling to the existing
+  header `network` layer), reusing the present-in-both thinness-floor machinery; id-like path segments
+  normalized; set-valued (volume-invariant).
+
+**Deferred within CAS-169:** suppress endpoints captured under `antibot.challenged`; classify
+endpoints against the antibot corpus; a framework-global endpoint stop-set (analytics beacons);
+WebSocket/EventSource (first cut is XHR+Fetch only).
+
+## Related
+
+- [CAS-139](https://linear.app/cascadinglabs/issue/CAS-139) -- anti-bot detection (the shipped antibot
+  verdict + headers this builds on).
+- [CAS-148](https://linear.app/cascadinglabs/issue/CAS-148) -- Fetch-domain request interception
+  (separate from passive capture; interception is *active* and stealth-relevant).

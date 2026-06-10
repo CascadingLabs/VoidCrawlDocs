@@ -41,6 +41,12 @@ faqs:
     a: >-
       No. VoidCrawl borrows warm profiles you already maintain in real Chrome. Log
       into the service you need normally, then point VoidCrawl at that profile name.
+  - q: How do I get a persistent profile that VoidCrawl owns, without leasing?
+    a: >-
+      Set BrowserConfig.user_data_dir to a durable directory. Chrome creates it on
+      first launch and reuses it on every run, so cookies and site state persist.
+      It works with BrowserSession and a single-browser BrowserPool, but takes no
+      lease lock -- cross-process arbitration is on you.
 references:
   - title: Chrome user data directory reference
     url: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/user_data_dir.md
@@ -150,6 +156,24 @@ finally:
 - **Warm profiles only.** VoidCrawl never creates or seeds profiles. Log into whatever service you need in real Chrome first; VoidCrawl borrows it.
 - **MCP scope.** Profile management is pipeline-only; agents drive whatever profile you pinned at server launch. See the [MCP server guide](/voidcrawl/guides/mcp-server/#pinning-to-a-chrome-profile).
 
+## Dedicated persistent profiles (`BrowserConfig.user_data_dir`)
+
+Leasing borrows a profile your real Chrome maintains. When you instead want a **dedicated, scrape-owned** profile that persists across runs -- a warm identity for anti-bot validation, or a long-lived local session that banks cookies like `cf_clearance` -- set `user_data_dir` directly on `BrowserConfig`:
+
+```python
+from voidcrawl import BrowserConfig, BrowserSession
+
+cfg = BrowserConfig(user_data_dir="/var/lib/voidcrawl/warm-profile")
+async with BrowserSession(cfg) as browser:
+    page = await browser.new_page("https://example.com")
+```
+
+The directory is created by Chrome on first launch and reused on every subsequent one, so cookies, local storage, and site state survive between runs. It works with `BrowserSession` and with a **single-browser** `BrowserPool`; a pool with `browsers > 1` or `chrome_ws_urls` raises `ValueError` -- one Chrome process per profile is a hard rule (Chrome locks the directory).
+
+<Aside type="caution">
+Unlike `with_profile`, `user_data_dir` takes **no advisory lease lock**. If two processes might point at the same directory, arbitration is on you -- Chrome's own `SingletonLock` will make the second launch fail unhelpfully.
+</Aside>
+
 ## Rotation (bot-wall hygiene)
 
 Hitting a bot-managed domain repeatedly from one identity raises its risk score. Rotation is a pipeline pattern, not an agent action -- keep a pool of `(proxy, profile)` identities and pick one per task:
@@ -167,7 +191,7 @@ A profile that's browsed a Cloudflare-fronted site carries a `cf_clearance` cook
 - ✅ It satisfies the Cloudflare **edge** challenge (the "checking your browser" interstitial) on revisits.
 - ❌ It does **not** satisfy an **inline managed-Turnstile widget** -- that issues a separate `cf-turnstile-response` token, scored fresh per request. A banked `cf_clearance` does nothing for it.
 
-So a warm profile helps you *reach* a Cloudflare-fronted page, but clearing an on-page Turnstile is the **headful + hardware-GPU** job ([Captcha handling](/voidcrawl/guides/captcha-handling/)). `cf_clearance` is also bound to the UA, so it only helps if the session presents the same UA that earned it. To persist it, mount a persistent `user_data_dir` (or a Docker volume over the profile dir).
+So a warm profile helps you *reach* a Cloudflare-fronted page, but clearing an on-page Turnstile is the **headful + hardware-GPU** job ([Captcha handling](/voidcrawl/guides/captcha-handling/)). `cf_clearance` is also bound to the UA, so it only helps if the session presents the same UA that earned it. To persist it, point [`BrowserConfig.user_data_dir`](#dedicated-persistent-profiles-browserconfiguser_data_dir) at a durable directory (or a Docker volume over the profile dir).
 
 ## FAQs
 
@@ -203,6 +227,13 @@ Yes, for the specific profile you want to lease. Chrome itself holds a `Singleto
 <summary>Why one Chrome process per profile instead of one Chrome with --profile-directory?</summary>
 
 Per-profile isolation. Separate `--user-data-dir` processes each crash, restart, and lease independently, and they sidestep Chrome's internal singleton behaviour. The trade-off is roughly 200 MB RAM per active profile, which is acceptable for pipeline workloads.
+
+</details>
+
+<details>
+<summary>How do I get a persistent profile that VoidCrawl owns, without leasing?</summary>
+
+Set `BrowserConfig.user_data_dir` to a durable directory. Chrome creates it on first launch and reuses it on every run, so cookies and site state persist. It works with `BrowserSession` and a single-browser `BrowserPool`, but takes no lease lock -- cross-process arbitration is on you.
 
 </details>
 

@@ -48,6 +48,38 @@ if __name__ == "__main__":
 - To return an object literal, wrap it in parentheses: `({key: value})`. Without parens, JS interprets `{` as a block statement.
 - You can modify the DOM, read browser APIs, and compute values -- anything you can do in a browser console.
 
+## Reaching cross-origin iframes
+
+`evaluate_js()` runs in the top document, so it cannot read a **cross-origin**
+iframe -- the same-origin policy makes that frame's `contentDocument` return
+`null`. Use `evaluate_js_in_frame(url_pattern, expression)` to run the
+expression *inside* the target frame's own execution context, where `document`
+is that frame's document. The frame is selected by a substring of its URL
+(`frame_urls()` lists what is available). This reaches payment iframes, OAuth
+frames, consent walls, and reCAPTCHA's `bframe`.
+
+```python
+# Read a value the parent page is blocked from seeing:
+inside = await tab.evaluate_js_in_frame(
+    "checkout.stripe.com", "document.querySelector('#card-errors')?.textContent"
+)
+
+# Discover frame URLs if you are not sure of the pattern:
+for url in await tab.frame_urls():
+    print(url)
+```
+
+The match must be unique: if more than one frame's URL contains the pattern,
+the call fails closed rather than guessing -- use a specific substring (e.g.
+`recaptcha/api2/bframe`, not `recaptcha`).
+
+**In-process requirement.** The target frame must be in the page's renderer
+process. VoidCrawl's defaults keep ordinary cross-origin frames in-process, but
+Chrome field-trial-isolates a few origins (notably google.com, so reCAPTCHA)
+out-of-process. To reach those, launch with
+`BrowserConfig(extra_args=["disable-site-isolation-trials"])` -- an explicit
+opt-in, since it weakens the browser's isolation posture.
+
 ## Expected Output
 
 ```
