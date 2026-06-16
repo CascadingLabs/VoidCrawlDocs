@@ -214,6 +214,7 @@ Launch the host in that directory and the tools below are available immediately.
 | `click_visual_coords` | Click at `(x, y)` CSS pixels -- the escape hatch for React pages where selector clicks are swallowed. |
 | `type_text` | Type into a selector, or into the focused element. |
 | `eval_js` | Evaluate a JavaScript expression; return the JSON result. |
+| `eval_js_in_frame` | Evaluate JavaScript inside a specific (possibly cross-origin) iframe, selected by a substring of its URL -- the way to reach a frame whose `contentDocument` is null from the parent. |
 | `wait_for_network_idle` | Wait until no in-flight requests for the idle window (event-driven). |
 
 **Captcha (non-default, external-solver pipelines only)**: `capture_captcha`, `solve_captcha`, `inject_captcha_token` exist but aren't the normal path -- VoidCrawl passes or surfaces captchas, it doesn't solve them. See [Captcha handling](/voidcrawl/guides/captcha-handling/).

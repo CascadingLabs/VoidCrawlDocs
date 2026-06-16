@@ -1,0 +1,18 @@
+name: Prose
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  no-em-dash:
+    name: No em dash
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Check prose punctuation
+        run: python scripts/check_no_em_dash.py

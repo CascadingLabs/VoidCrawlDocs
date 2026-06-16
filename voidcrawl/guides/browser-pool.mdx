@@ -45,6 +45,8 @@ async with BrowserPool(config) as pool:
 ...
 ```
 
+The nested `BrowserConfig` is applied to every Chrome the pool launches. One constraint: `BrowserConfig.user_data_dir` (a [persistent profile](/voidcrawl/guides/profiles/#dedicated-persistent-profiles-browserconfiguser_data_dir)) requires `browsers=1` and no `chrome_ws_urls` -- Chrome locks the profile directory, so it can't be shared across processes. The pool raises `ValueError` otherwise.
+
 ### Via environment variables
 
 ```python
@@ -69,6 +71,7 @@ async with BrowserPool(config) as pool:
 | `CHROME_NO_SANDBOX` | -- | Set to `"1"` to pass `--no-sandbox`. |
 | `CHROME_HEADLESS` | `1` | Set to `"0"` for headful mode. |
 | `SCALE_PROFILE` | -- | `"minimal"`, `"balanced"`, or `"advanced"` -- overrides all other sizing vars. |
+| `CHROME_LAUNCH_TIMEOUT_SECS` | `45` | Max seconds to wait for Chrome to report its DevTools WebSocket URL at launch. Read by the Rust core (applies to `BrowserSession` too, not just pools). Raise it on slow cold starts -- e.g. CI runners without a working GPU, where the stealth GPU flags make Chrome's GPU process crash-loop before settling. |
 
 ## Parallel Fetching
 
