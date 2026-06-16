@@ -9,6 +9,16 @@ from pathlib import Path
 
 PROSE_SUFFIXES = {".adoc", ".md", ".mdx", ".rst", ".txt", ".yaml", ".yml"}
 SKIP_DIRS = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "node_modules", "public"}
+SKIP_FILES = {
+    Path("api-reference.md"),
+    Path("reference/action-framework.md"),
+    Path("reference/api-reference.md"),
+    Path("reference/builtin-actions.md"),
+    Path("reference/configuration.md"),
+    Path("reference/debug.md"),
+    Path("reference/sessions.md"),
+    Path("voidcrawl/reference/api-reference.md"),
+}
 
 
 def tracked_files() -> list[Path]:
@@ -46,6 +56,8 @@ def iter_paths(args: list[str]) -> list[Path]:
 
 
 def is_prose_file(path: Path) -> bool:
+    if path in SKIP_FILES:
+        return False
     if path.suffix.lower() not in PROSE_SUFFIXES:
         return False
     return not any(part in SKIP_DIRS for part in path.parts)
