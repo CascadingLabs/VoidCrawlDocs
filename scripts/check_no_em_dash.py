@@ -10,13 +10,6 @@ from pathlib import Path
 PROSE_SUFFIXES = {".adoc", ".md", ".mdx", ".rst", ".txt", ".yaml", ".yml"}
 SKIP_DIRS = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "node_modules", "public"}
 SKIP_FILES = {
-    Path("api-reference.md"),
-    Path("reference/action-framework.md"),
-    Path("reference/api-reference.md"),
-    Path("reference/builtin-actions.md"),
-    Path("reference/configuration.md"),
-    Path("reference/debug.md"),
-    Path("reference/sessions.md"),
     Path("voidcrawl/reference/api-reference.md"),
 }
 
