@@ -1,6 +1,6 @@
 ---
-title: Native Chrome Profiles
-description: Lease an existing Chrome profile (cookies, logins, extensions) exclusively for a VoidCrawl session.
+title: Profiles
+description: Lease native Chrome profiles or manage scrape-owned profiles for persistent VoidCrawl sessions.
 faqs:
   - q: What is a native Chrome profile in VoidCrawl?
     a: >-
@@ -34,13 +34,14 @@ faqs:
       pipeline workloads.
   - q: Is the profile API available over MCP?
     a: >-
-      No, it is Python-only. The MCP server picks a profile at startup with
-      --profile NAME or VOIDCRAWL_PROFILE, and agents drive whatever Chrome the
-      operator handed them. That keeps profile selection a human decision.
+      Native Chrome profile discovery is not exposed over MCP. VoidCrawl-managed
+      profiles are exposed as metadata and pool tools, and session_open can lease a
+      managed profile by profile_id or profile_pool.
   - q: Does VoidCrawl create new profiles or seed them with logins?
     a: >-
-      No. VoidCrawl borrows warm profiles you already maintain in real Chrome. Log
-      into the service you need normally, then point VoidCrawl at that profile name.
+      Native profile leasing never creates or seeds your daily Chrome profiles.
+      Managed profiles can be created under VOIDCRAWL_PROFILE_ROOT, but login and
+      identity seeding are still operator or pipeline work.
   - q: How do I get a persistent profile that VoidCrawl owns, without leasing?
     a: >-
       Set BrowserConfig.user_data_dir to a durable directory. Chrome creates it on
@@ -58,9 +59,12 @@ references:
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-Sometimes a scrape needs the same Chrome you use day to day, logged into LinkedIn, your SSO provider, or a SaaS dashboard. VoidCrawl's profile API leases one of your real Chrome profiles exclusively for a session, launches Chrome against it, and returns the lease when you are done.
+Sometimes a scrape needs persistent browser state: cookies, local storage, extensions, or a warmed anti-bot identity. VoidCrawl supports two profile models:
 
-This is a **Python-only surface**. The [MCP server](/voidcrawl/guides/mcp-server/) pins to a profile at startup, but never exposes profile management to agents.
+- **Native Chrome profile leasing** borrows an existing daily Chrome profile such as `Default` or `Profile 1`. This is a Python-only surface, except that the MCP server can be pinned to one native profile at launch.
+- **VoidCrawl-managed profiles** are standalone Chrome `user_data_dir` roots under `VOIDCRAWL_PROFILE_ROOT`. Python and MCP can create, clone, list, pool, and lease them per session.
+
+Use native leasing when a human has already logged into a real Chrome profile. Use managed profiles when a crawler or MCP agent needs a bounded set of scrape-owned identities.
 
 ## Listing installed profiles
 
@@ -153,8 +157,52 @@ finally:
 ## Design notes
 
 - **One Chrome process per profile.** Every lease spawns its own `--user-data-dir` Chrome. This costs roughly 200 MB RAM per active profile but gives you clean per-profile crash isolation and sidesteps Chrome's `--profile-directory` singleton locking.
-- **Warm profiles only.** VoidCrawl never creates or seeds profiles. Log into whatever service you need in real Chrome first; VoidCrawl borrows it.
-- **MCP scope.** Profile management is pipeline-only; agents drive whatever profile you pinned at server launch. See the [MCP server guide](/voidcrawl/guides/mcp-server/#pinning-to-a-chrome-profile).
+- **Native profiles are warm only.** VoidCrawl never creates or seeds your daily Chrome profiles. Log into whatever service you need in real Chrome first, close that profile, then let VoidCrawl borrow it.
+- **Managed profiles are scrape-owned.** VoidCrawl can create and clone standalone managed profiles, but it still does not fabricate logins or bypass site policy. You seed them by normal browsing, a trusted operator flow, or your own pipeline.
+- **MCP scope.** MCP clients cannot enumerate native Chrome profiles. They can use managed-profile tools inside the configured managed root. See the [MCP server guide](/voidcrawl/guides/mcp-server/#profiles).
+
+## VoidCrawl-managed profiles
+
+Managed profiles are standalone Chromium `user_data_dir` directories owned by VoidCrawl. They live under `VOIDCRAWL_PROFILE_ROOT`; if unset, VoidCrawl uses the platform data dir, for example `~/.local/share/voidcrawl/profiles` on Linux.
+
+Python API:
+
+```python
+from voidcrawl.profiles import ProfileRegistry
+
+registry = ProfileRegistry.default()
+registry.create_profile(
+    "research-1",
+    description="warm identity for research tasks",
+    labels=["research"],
+)
+registry.create_pool("research", ["research-1"], max_active=1)
+```
+
+MCP tools expose the same registry:
+
+| Tool | Purpose |
+|---|---|
+| `profile_create` | Create a standalone managed profile. |
+| `profile_clone` | Clone a managed profile id or explicit `user_data_dir` path into a new managed profile. |
+| `profile_list` / `profile_describe` | Return metadata only: id, path, labels, description, size, status. |
+| `profile_delete` | Delete an unlocked managed profile. |
+| `profile_pool_create` | Create or replace a named round-robin pool. |
+| `profile_pool_list` / `profile_pool_describe` | Inspect pools and member profile metadata. |
+
+Lease a managed profile into a stateful MCP session:
+
+```json
+{ "profile_id": "research-1", "headful": true }
+```
+
+Or lease from a pool:
+
+```json
+{ "profile_pool": "research", "headful": false }
+```
+
+The response includes the selected `profile_id`. Managed-profile tools never expose cookie or storage values, but sessions using those profiles can act with their authenticated state, so scope `VOIDCRAWL_PROFILE_ROOT` deliberately.
 
 ## Dedicated persistent profiles (`BrowserConfig.user_data_dir`)
 
@@ -182,7 +230,7 @@ Hitting a bot-managed domain repeatedly from one identity raises its risk score.
 - **Profile per identity.** Give each identity its own `user_data_dir` and round-robin. Don't fan one profile across concurrent leases -- Chrome locks it (one process per profile).
 - **Pace.** Reuse one session for same-origin work; space `fetch_many` batches against managed domains rather than firing them back-to-back.
 
-There is no built-in rotator; it's a caller/pipeline concern.
+For MCP sessions, create a managed pool with `profile_pool_create` and call `session_open` with `profile_pool`. For Python-only flows, rotation can still be a caller pattern over `(proxy, user_data_dir)` identities.
 
 ## Warm profiles & Cloudflare `cf_clearance`
 
@@ -240,14 +288,18 @@ Set `BrowserConfig.user_data_dir` to a durable directory. Chrome creates it on f
 <details>
 <summary>Is the profile API available over MCP?</summary>
 
-No, it is Python-only. The MCP server picks a profile at startup with `--profile NAME` or `VOIDCRAWL_PROFILE=NAME`, and agents drive whatever Chrome the operator handed them. That keeps profile selection a human decision.
+Native Chrome profile discovery is not exposed over MCP. The server can be pinned to one native profile at startup with `--profile NAME` or `VOIDCRAWL_PROFILE=NAME`.
+
+VoidCrawl-managed profiles are exposed over MCP as `profile_*` and `profile_pool_*` tools, and `session_open` can lease one with `profile_id` or `profile_pool`. Those tools return metadata only, but a session launched with the profile can use its authenticated browser state.
 
 </details>
 
 <details>
 <summary>Does VoidCrawl create new profiles or seed them with logins?</summary>
 
-No. VoidCrawl borrows warm profiles you already maintain in real Chrome. Log into the service you need normally, then point VoidCrawl at that profile name.
+For native Chrome profile leasing, no. VoidCrawl borrows warm profiles you already maintain in real Chrome.
+
+For managed profiles, yes: VoidCrawl can create an empty standalone profile or clone an existing managed profile or explicit source path. It does not seed logins for you.
 
 </details>
 

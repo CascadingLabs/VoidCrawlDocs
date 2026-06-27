@@ -1,0 +1,206 @@
+---
+title: Challenge Escalation
+description: Hand an active anti-bot wall to a human operator or resolver through the same VoidCrawl browser tab.
+faqs:
+  - q: Does challenge escalation solve captchas automatically?
+    a: >-
+      No. The shipped flow captures evidence and same-tab attach coordinates, then lets
+      a human operator clear the wall through VNC or noVNC. Future resolvers use the
+      same event contract, but automatic resolution is opt-in and domain-scoped.
+  - q: When should I call capture_challenge?
+    a: >-
+      Call it after session_navigate or a stateful action lands on an active wall. CDN
+      presence alone is telemetry; a blocking anti-bot verdict or active DOM captcha is
+      what makes a challenge event useful.
+  - q: Why same-tab attach coordinates?
+    a: >-
+      The warm cookies, target URL, browser fingerprint, and challenge widget all live
+      in the existing tab. Resolvers attach to that tab by websocket_url and target_id
+      instead of opening a fresh browser that would get a different challenge.
+references:
+  - title: MCP server guide
+    url: /voidcrawl/guides/mcp-server/
+  - title: Captcha handling
+    url: /voidcrawl/guides/captcha-handling/
+  - title: Docker & VNC
+    url: /voidcrawl/guides/docker/
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Challenge escalation is the bridge between detection and recovery. VoidCrawl keeps ownership of the browser session, captures a neutral event, and exposes enough coordinates for an operator or trusted resolver to clear the wall in the same tab.
+
+V1 is manual by design: open VNC or noVNC, clear the wall, mark the event resolved, then resume the session. VoidCrawl still does not forge tokens, outsource puzzle solving, or hide that a challenge happened.
+
+## Event contract
+
+`capture_challenge` combines:
+
+- the last `session_navigate` anti-bot verdict,
+- a live DOM captcha probe,
+- optional accessibility summary for triage,
+- same-tab attach coordinates: `websocket_url`, `target_id`, `session_id`,
+- optional operator links: `vnc_url`, `novnc_url`.
+
+Presence-only CDN signals are telemetry. Active challenge verdicts and active DOM captcha widgets are blocking events.
+
+## Start a visible browser
+
+Use the headful Docker stack when you need a browser an operator can see:
+
+```sh
+docker compose -f docker/docker-compose.headful.yml up
+```
+
+Open noVNC in a browser:
+
+```text
+http://127.0.0.1:6080
+```
+
+Native VNC is also available for lower latency:
+
+```text
+vnc://127.0.0.1:5900
+```
+
+<Aside type="caution">
+VNC and noVNC stream a live authenticated browser. Keep them bound to localhost or protected by your own network controls.
+</Aside>
+
+## Add operator links to MCP results
+
+If the MCP host starts `voidcrawl-mcp`, set these environment variables in that host's MCP config:
+
+```sh
+VOIDCRAWL_NOVNC_URL=http://127.0.0.1:6080
+VOIDCRAWL_VNC_URL=vnc://127.0.0.1:5900
+```
+
+You can also pass `novnc_url` and `vnc_url` directly to `capture_challenge`.
+
+## Manual operator flow
+
+<Steps>
+1. Open a stateful headful session.
+
+```json
+{ "headful": true, "port": 9222 }
+```
+
+2. Navigate to the target.
+
+```json
+{ "session_id": "SESSION_ID", "url": "https://example.com", "timeout_secs": 30 }
+```
+
+3. Capture the active wall.
+
+```json
+{
+  "session_id": "SESSION_ID",
+  "novnc_url": "http://127.0.0.1:6080",
+  "vnc_url": "vnc://127.0.0.1:5900"
+}
+```
+
+4. Clear the challenge through noVNC or VNC in the visible browser.
+
+5. Mark the event resolved.
+
+```json
+{
+  "session_id": "SESSION_ID",
+  "event_id": "EVENT_ID",
+  "resolver": "manual_vnc",
+  "note": "operator cleared challenge in noVNC"
+}
+```
+
+6. Wait for resolution. By default this re-probes the DOM before resuming.
+
+```json
+{ "session_id": "SESSION_ID", "event_id": "EVENT_ID", "timeout_secs": 10 }
+```
+
+7. Continue the session, then close it when done.
+
+```json
+{ "session_id": "SESSION_ID" }
+```
+</Steps>
+
+## Capture result shape
+
+A blocking event returns the evidence and attach coordinates a resolver needs:
+
+```json
+{
+  "challenge": {
+    "event_id": "EVENT_ID",
+    "url": "https://example.com/",
+    "status": "captured",
+    "blocking": true,
+    "antibot": {
+      "vendors": ["cloudflare"],
+      "challenged": true,
+      "challenge_vendor": "cloudflare"
+    },
+    "dom_captcha": {
+      "kind": "turnstile",
+      "widget_rendered": true,
+      "active": true
+    },
+    "attach_coordinates": {
+      "websocket_url": "ws://127.0.0.1:9222/devtools/browser/...",
+      "target_id": "TARGET_ID",
+      "session_id": "SESSION_ID",
+      "novnc_url": "http://127.0.0.1:6080",
+      "vnc_url": "vnc://127.0.0.1:5900"
+    }
+  }
+}
+```
+
+## Resolver hook
+
+Automated resolvers use the same event and attach to the existing tab. They should not launch a new browser for the challenge.
+
+Rules:
+
+- Attach with `{ websocket_url, target_id }` from `attach_coordinates`.
+- Keep recipes domain-scoped and explicitly enabled.
+- Mark exactly one outcome: `mark_challenge_resolved` or `mark_challenge_failed`.
+- If resolution fails, rotate identity or fail with the captured evidence.
+
+## Related tools
+
+| Tool | Purpose |
+|---|---|
+| `capture_challenge` | Capture evidence, DOM captcha state, and same-tab attach coordinates. |
+| `mark_challenge_resolved` | Record that an operator or resolver cleared the event. |
+| `mark_challenge_failed` | Record that the wall could not be cleared. |
+| `wait_for_challenge_resolution` | Wait for the outcome and optionally re-probe the DOM before resuming. |
+
+## FAQs
+
+<details>
+<summary>Does challenge escalation solve captchas automatically?</summary>
+
+No. The shipped flow captures evidence and same-tab attach coordinates, then lets a human operator clear the wall through VNC or noVNC. Future resolvers use the same event contract, but automatic resolution is opt-in and domain-scoped.
+
+</details>
+
+<details>
+<summary>When should I call capture_challenge?</summary>
+
+Call it after `session_navigate` or a stateful action lands on an active wall. CDN presence alone is telemetry; a blocking anti-bot verdict or active DOM captcha is what makes a challenge event useful.
+
+</details>
+
+<details>
+<summary>Why same-tab attach coordinates?</summary>
+
+The warm cookies, target URL, browser fingerprint, and challenge widget all live in the existing tab. Resolvers attach to that tab by `websocket_url` and `target_id` instead of opening a fresh browser that would get a different challenge.
+
+</details>

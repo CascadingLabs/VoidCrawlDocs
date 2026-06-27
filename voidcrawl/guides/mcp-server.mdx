@@ -22,14 +22,11 @@ faqs:
       x, y coordinates so the page sees a genuine user click.
   - q: Can an AI agent list or switch Chrome profiles at runtime?
     a: >-
-      No, by design. There is no list_profiles or acquire_profile tool on the server.
-      A Chrome profile is a live authenticated session (cookies, OAuth tokens, saved
-      logins), so letting the model choose one at runtime would let a prompt-injected or
-      misbehaving agent jump into any identity on the machine and exfiltrate it. The
-      launcher grants exactly one profile, pinned with --profile NAME or
-      VOIDCRAWL_PROFILE, and the agent operates with least privilege inside it. Rotation
-      is an operator or Python-caller action between runs: relaunch pinned to a different
-      warm profile, go headful with CHROME_HEADLESS=0, or swap the proxy.
+      MCP clients cannot enumerate or switch your daily Chrome profiles. A native Chrome
+      profile is a live authenticated session, so --profile NAME and VOIDCRAWL_PROFILE
+      are launcher decisions. Agents can use VoidCrawl-managed profiles only: standalone
+      user-data-dir roots under VOIDCRAWL_PROFILE_ROOT whose tools return metadata, never
+      cookies or storage values.
   - q: How does the MCP server report a captcha wall?
     a: >-
       Every tool call that hits a captcha returns an MCP error with code -32001, a
@@ -185,7 +182,8 @@ Launch the host in that directory and the tools below are available immediately.
 
 | Tool | Purpose |
 |---|---|
-| `fetch` / `fetch_many` | One URL, or many in parallel. The default for bulk extraction. `fetch_many` also returns a `PoolMeta` summary -- `max_tabs`, how many requests `queued`, and the worst queue wait -- so you can tell when you oversubscribed and cap the next batch at `max_tabs`. |
+| `fetch` / `fetch_many` | One URL, or many in parallel. The default when you need rendered HTML. `fetch_many` also returns a `PoolMeta` summary -- `max_tabs`, how many requests `queued`, and the worst queue wait -- so you can tell when you oversubscribed and cap the next batch at `max_tabs`. |
+| `fetch_snapshot` | One URL, compact rendered-page snapshot: headings, text blocks, links, controls, forms, metadata, and truncation stats. Prefer this for first-pass page perception. |
 | `screenshot` | Load a URL, return a PNG; optional `bbox` crop. See the [Screenshot API guide](/voidcrawl/guides/screenshot-api/). |
 | `pool_status` | Live pool snapshot: `max_tabs`, `available`, `in_flight`, `sessions_open`. Read before a big fan-out. |
 
@@ -193,7 +191,8 @@ Launch the host in that directory and the tools below are available immediately.
 
 | Tool | Purpose |
 |---|---|
-| `session_open` / `session_navigate` / `session_content` / `session_close` | Open -> navigate -> read HTML/title/url -> tear down. |
+| `session_open` / `session_navigate` / `session_content` / `session_close` | Open -> navigate -> read HTML/title/url -> tear down. `session_open` can lease `profile_id`, `profile_pool`, or an explicit `user_data_dir`. |
+| `session_snapshot` | Compact snapshot of the current session page after login, pagination, clicks, or other stateful actions. |
 
 **Perceive**
 
@@ -218,6 +217,8 @@ Launch the host in that directory and the tools below are available immediately.
 | `wait_for_network_idle` | Wait until no in-flight requests for the idle window (event-driven). |
 
 **Captcha (non-default, external-solver pipelines only)**: `capture_captcha`, `solve_captcha`, `inject_captcha_token` exist but aren't the normal path -- VoidCrawl passes or surfaces captchas, it doesn't solve them. See [Captcha handling](/voidcrawl/guides/captcha-handling/).
+
+**Challenge escalation**: `capture_challenge`, `mark_challenge_resolved`, `mark_challenge_failed`, and `wait_for_challenge_resolution` hand an active wall to an operator or resolver without opening a new browser. See [Challenge escalation](/voidcrawl/guides/challenge-escalation/).
 
 **Download (opt-in).** Hidden unless the server runs with `VOIDCRAWL_ALLOW_DOWNLOADS=1`. Each tool fetches a file through stealth Chrome into a quarantine dir, runs it through the built-in antivirus gate, and moves it into `output_dir` only if it comes back clean.
 
@@ -254,9 +255,16 @@ click_by_role { "session_id": "...", "role": "button", "name": "Load more" }
 
 This survives redesigns that rewrite class names and wrappers, which is where CSS selectors break. It is flakier when accessible names are ambiguous, localized, or duplicated, so the response includes `named_count` against `node_count`: a low ratio means a thin AX tree, and the agent should fall back to `extract` (CSS), a `screenshot`, or `click_visual_coords`. When several controls share a role and name, pass `nth` (zero-based) to pick one. The [Accessibility Tree guide](/voidcrawl/guides/accessibility-tree/) covers the model in full.
 
-## Pinning to a Chrome profile
+## Profiles
 
-By default the server launches a fresh headless Chrome per run. Point it at an existing warm profile (logged into LinkedIn, Reddit, or similar) with either a flag or an env var:
+By default the server launches fresh headless Chrome with ephemeral state. You have two persistent-state options:
+
+- **Pinned native Chrome profile**: the launcher grants one existing daily Chrome profile to the server with `--profile` or `VOIDCRAWL_PROFILE`.
+- **VoidCrawl-managed profiles**: the agent or operator creates standalone profiles under `VOIDCRAWL_PROFILE_ROOT` and leases them per `session_open`.
+
+### Pinning to a native Chrome profile
+
+Point the server at an existing warm profile (logged into LinkedIn, Reddit, or similar) with either a flag or an env var:
 
 ```sh
 voidcrawl-mcp --profile "Profile 1"
@@ -268,17 +276,28 @@ VOIDCRAWL_PROFILE="Profile 1" voidcrawl-mcp
 Exactly one process can hold a profile lease at a time. If another `voidcrawl-mcp` (or a Python `with_profile(...)` caller) already owns it, startup fails with `ProfileBusy`. Close the other session first. See the [Profiles guide](/voidcrawl/guides/profiles/) for the full lease model.
 </Aside>
 
-### Why the agent can't switch profiles
+### Managed profile registry
 
-Profile management is intentionally **not exposed to MCP clients**: there is no `list_profiles` or `acquire_profile` tool. The reason is least privilege, not just a smaller blast radius. A Chrome profile is a live authenticated session (cookies, OAuth tokens, saved logins), and an agent that could enumerate and switch profiles at runtime could hop into any identity on the machine (your email, your bank) and exfiltrate it through a single prompt injection. So the launcher grants exactly one profile and the agent drives whatever Chrome you handed it.
+Managed profiles are VoidCrawl-owned Chrome `user_data_dir` roots. They live under `VOIDCRAWL_PROFILE_ROOT`, or the platform data-dir default such as `~/.local/share/voidcrawl/profiles` on Linux. They are not subprofiles inside your daily Chrome directory.
 
-That means **rotation is an operator or Python-caller action, not something the agent does mid-session.** When a tool call returns `CaptchaDetected` (or you otherwise need a different identity or IP), the recovery loop lives outside the agent:
+| Tool | Purpose |
+|---|---|
+| `profile_create` | Create a standalone managed profile. |
+| `profile_clone` | Copy a managed profile id or explicit source path into a new managed profile. |
+| `profile_list` / `profile_describe` | Return profile metadata: id, path, labels, description, size, status. |
+| `profile_delete` | Delete an unlocked managed profile. |
+| `profile_pool_create` | Create or replace an ordered round-robin pool. |
+| `profile_pool_list` / `profile_pool_describe` | Inspect profile pools and their member metadata. |
 
-- **Relaunch** the server pinned to a different warm profile.
-- **Go headful** with `CHROME_HEADLESS=0` to clear managed Turnstile (often passes with no rotation; see [Captcha handling](/voidcrawl/guides/captcha-handling/)).
-- **Swap the proxy** to a cleaner IP.
+Use `session_open` with either `profile_id` or `profile_pool`:
 
-A Python orchestrator can drive that loop programmatically with [`with_profile(...)`](/voidcrawl/guides/profiles/) across runs, leasing a fresh profile per attempt. VoidCrawl is the detector; your pipeline is the recovery mechanism.
+```json
+{ "profile_pool": "search-identities", "headful": true }
+```
+
+The response includes the selected `profile_id`. Profile tools never return cookies, local storage, or saved passwords, but they can start browsers with those profiles, so only enable them for agents you trust with that managed root.
+
+When a tool call returns `CaptchaDetected` or a captured challenge cannot be cleared, rotate a managed profile, go headful with `CHROME_HEADLESS=0`, swap proxy, or fail with evidence. VoidCrawl is the detector; your pipeline is the recovery mechanism.
 
 ## Typed errors
 
@@ -329,9 +348,9 @@ React and similar frameworks install event listeners that only fire on real trus
 <details>
 <summary>Can an AI agent list or switch Chrome profiles at runtime?</summary>
 
-No, by design. There is no `list_profiles` or `acquire_profile` tool on the server. The reason is least privilege, not just a smaller blast radius: a Chrome profile is a live authenticated session (cookies, OAuth tokens, saved logins), so an agent that could enumerate and switch profiles at runtime could hop into any identity on the machine (your email, your bank) and exfiltrate it through a single prompt injection. The launcher grants exactly one profile, pinned with `--profile "Profile 1"` or `VOIDCRAWL_PROFILE=...`, and the agent drives whatever Chrome you handed it.
+MCP clients cannot enumerate or switch your daily Chrome profiles. A native Chrome profile is a live authenticated session (cookies, OAuth tokens, saved logins), so `--profile "Profile 1"` and `VOIDCRAWL_PROFILE=...` stay launcher decisions.
 
-Rotation is therefore an operator or Python-caller action between runs, not something the agent does mid-session. When a tool call returns `CaptchaDetected` and you need a different identity or IP, relaunch pinned to a different warm profile, go headful with `CHROME_HEADLESS=0`, or swap the proxy. A Python orchestrator can drive that loop with [`with_profile(...)`](/voidcrawl/guides/profiles/). See [Captcha handling](/voidcrawl/guides/captcha-handling/) for the full pattern.
+Agents can use VoidCrawl-managed profiles when you expose that managed root. Those profiles are standalone `user_data_dir` directories under `VOIDCRAWL_PROFILE_ROOT`; tools return metadata only, but a session launched with `profile_id` or `profile_pool` can use the profile's authenticated state. Treat the managed root as an explicit trust boundary.
 
 </details>
 
