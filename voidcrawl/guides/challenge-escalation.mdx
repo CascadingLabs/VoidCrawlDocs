@@ -19,14 +19,14 @@ faqs:
       instead of opening a fresh browser that would get a different challenge.
 references:
   - title: MCP server guide
-    url: /voidcrawl/guides/mcp-server/
+    url: https://cascadinglabs.com/voidcrawl/guides/mcp-server/
   - title: Captcha handling
-    url: /voidcrawl/guides/captcha-handling/
+    url: https://cascadinglabs.com/voidcrawl/guides/captcha-handling/
   - title: Docker & VNC
-    url: /voidcrawl/guides/docker/
+    url: https://cascadinglabs.com/voidcrawl/guides/docker/
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
 Challenge escalation is the bridge between detection and recovery. VoidCrawl keeps ownership of the browser session, captures a neutral event, and exposes enough coordinates for an operator or trusted resolver to clear the wall in the same tab.
 
@@ -81,7 +81,6 @@ You can also pass `novnc_url` and `vnc_url` directly to `capture_challenge`.
 
 ## Manual operator flow
 
-<Steps>
 1. Open a stateful headful session.
 
 ```json
@@ -128,7 +127,6 @@ You can also pass `novnc_url` and `vnc_url` directly to `capture_challenge`.
 ```json
 { "session_id": "SESSION_ID" }
 ```
-</Steps>
 
 ## Capture result shape
 
