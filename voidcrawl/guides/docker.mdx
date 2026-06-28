@@ -72,6 +72,28 @@ group_add: ["render"]   # render-node GID; numeric on some hosts
 
 Intel and AMD work through `/dev/dri` out of the box; NVIDIA needs the `nvidia-container-toolkit` (`--gpus all`) instead. With no GPU passed through the container falls back to SwiftShader -- fine for bulk scraping, but for managed-Turnstile targets prefer the headful container below.
 
+### DNS override
+
+If the container inherits an unreachable host stub resolver and Chrome cannot resolve public sites, pass deterministic nameservers at startup:
+
+```bash
+VOIDCRAWL_DNS_SERVERS=1.1.1.1,8.8.8.8 \
+  docker compose -f docker/docker-compose.yml up -d --build
+```
+
+Leave the variable unset for Docker's normal resolver behavior.
+
+### Persistent profiles
+
+By default Chrome profiles live under `/tmp` and reset with the container. To persist cookies, logins, and Cloudflare clearance, set `CHROME_PROFILES_DIR=/profiles`; the compose files already mount a named profile volume there:
+
+```bash
+CHROME_PROFILES_DIR=/profiles docker compose -f docker/docker-compose.yml up -d
+# reset saved profiles: docker compose -f docker/docker-compose.yml down -v
+```
+
+Each Chrome owns one subdirectory (`chrome-profile-1`, `chrome-profile-2`, ...). Chrome locks a profile while running, so do not share one profile dir across multiple Chrome processes.
+
 ## Headful Docker (GPU + VNC)
 
 Run Chrome with a real GUI inside Docker -- GPU-accelerated, isolated from your desktop, viewable via VNC.
@@ -83,6 +105,8 @@ Docker bundles Sway<sup>[◑](#ref-3)</sup>, Chrome, and wayvnc<sup>[◇](#ref-4
 <DockerHeadfulFigure client:visible />
 
 Everything else (which GPU runtime to wire up, which shared memory size, which ports) is declared in `docker/docker-compose.headful.yml`. There's one compose profile per GPU vendor (`amd`, `intel`, `nvidia`, `cpu`), and all runtime knobs are `.env`-driven. The `run-headful.sh` wrapper is a tiny shell script that only does GPU auto-detection before handing off to `docker compose`; you can skip it entirely and invoke compose directly in CI.
+
+Attached/headful tabs keep Chrome's native fingerprint and avoid pre-navigation stealth mutations. The container supplies the human-shaped launch surface, GPU, and profile state; VoidCrawl lazily escalates CDP instrumentation only when a feature such as network capture needs it.
 
 ### Quick start
 
