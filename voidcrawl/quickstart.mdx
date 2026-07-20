@@ -47,10 +47,9 @@ from voidcrawl import BrowserConfig, BrowserSession
 
 async def main():
     async with BrowserSession(BrowserConfig()) as session:
-        page = await session.new_page("https://qscrape.dev")
-        print(await page.title())   # "qScrape"
-        print(len(await page.content()))
-        await page.close()
+        async with session.page("https://qscrape.dev") as page:
+            print(await page.title())   # "qScrape"
+            print(len(await page.content()))
 
 asyncio.run(main())
 ```
@@ -120,13 +119,14 @@ asyncio.run(main())
 - Every method on `Page`, `PooledTab`, and `BrowserSession` is **async** -- always `await` them.
 - Both `BrowserPool` and `BrowserSession` are async context managers that ensure clean shutdown.
 - Stealth mode is **on by default**. Pass `stealth=False` to `BrowserConfig` to disable it.
-- `goto(url)` and `navigate(url)` are **both useful but not interchangeable**:
-  - `goto(url, timeout=30.0)` navigates **and waits for network idle**, returning a `PageResponse` (HTML, final URL, status, redirect flag). Use this when you want to read content immediately after -- it's the right default for most scraping.
-  - `navigate(url)` fires the navigation and returns immediately with `None`. Use it when you want to control the wait yourself (e.g. `await tab.wait_for_navigation()`, wait on a specific selector, or race multiple conditions). Reading `content()` right after `navigate()` without waiting may return an empty or partial page.
+- `goto(url, wait_until="networkidle", timeout=30.0)` navigates and waits for strict network idle. Navigation timeouts raise `NavigationTimeoutError` with structured phase and timing details.
+- `navigate(url)` dispatches navigation without waiting for network idle. Use it when a selector or expected API response is the meaningful readiness condition. Reading `content()` immediately after `navigate()` may return an empty or partial page.
+- `BrowserSession.page()` is the safest low-level tab API. Its async context manager closes the tab on success, error, or cancellation.
 
 ## Next Steps
 
 - [Browser Pool](/voidcrawl/guides/browser-pool/) -- understand cold start vs tab reuse
+- [Page Lifecycle and Response Capture](/voidcrawl/guides/page-lifecycle-and-response-capture/) -- manage tabs and capture bounded API payloads
 - [Built-in Actions](/voidcrawl/guides/builtin-actions/) -- click, type, scroll, and query the DOM
 - [Cookbook](/voidcrawl/guides/cookbook/) -- cookies, network logging, per-tab headers, and response handling
 - [Stealth Mode](/voidcrawl/guides/stealth/) -- how anti-detection works

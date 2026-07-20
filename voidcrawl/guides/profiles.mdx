@@ -179,6 +179,46 @@ registry.create_profile(
 registry.create_pool("research", ["research-1"], max_active=1)
 ```
 
+### Split one profile across Chrome instances
+
+Chrome refuses to let two processes write one physical `user_data_dir`.
+`split_profile` turns one quiesced managed profile into isolated temporary
+copies in a single operation:
+
+```python
+from voidcrawl import BrowserConfig, BrowserSession
+
+async with registry.split_profile("research-1", copies=2) as split:
+    first_path, second_path = split.paths
+    async with (
+        BrowserSession(BrowserConfig(user_data_dir=first_path)) as first,
+        BrowserSession(BrowserConfig(user_data_dir=second_path)) as second,
+    ):
+        ...  # two separate Chrome instances from the same starting profile
+```
+
+VoidCrawl holds one source lease across the complete split. Both copies
+therefore contain the same starting cookies, storage, extensions, bookmarks,
+and profile identity. Each copy has a unique directory and its own Chrome
+`SingletonLock`, like two Docker volumes initialized from one profile.
+
+This is **copy-on-start isolation**, not live synchronization. Writes made by
+one Chrome do not appear in the other and are not merged back into the source.
+The temporary copies are deleted when the context exits. Splits are limited to
+2 through 16 copies as a disk-usage guardrail. Use `snapshot_profile` when only
+one disposable copy is needed.
+
+Close regular Chrome, then fork its installed native `Default` profile into two
+visible Chrome instances with the repository's runnable demo:
+
+```bash
+uv run python examples/profile_split_headful.py --hold-seconds 20
+```
+
+Use `--source "Profile 1"` or an explicit native profile-directory path to
+select a different profile. `fork_profile` copies that profile and Chrome's
+root `Local State` into each standalone worker directory.
+
 MCP tools expose the same registry:
 
 | Tool | Purpose |

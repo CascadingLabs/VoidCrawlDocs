@@ -1,0 +1,109 @@
+---
+title: Page Lifecycle and Response Capture
+description: Safely manage tabs and capture bounded response payloads through CDP.
+---
+
+## Managed page lifecycle
+
+Use `browser.page()` when a tab belongs to one operation. The context manager
+closes the tab on normal exit, exceptions, and cancellation:
+
+```python
+import asyncio
+from voidcrawl import BrowserSession
+
+async def main():
+    async with BrowserSession() as browser:
+        async with browser.page() as page:
+            await page.add_init_script("globalThis.myWorker = true")
+            await page.goto(
+                "https://example.com",
+                wait_until="networkidle",
+                timeout=60,
+            )
+            print(await page.title())
+
+asyncio.run(main())
+```
+
+`browser.new_page()` creates a blank page by default. Passing a URL remains
+supported. Page creation is safe to run concurrently:
+
+```python
+pages = await asyncio.gather(*(browser.new_page() for _ in range(4)))
+try:
+    await asyncio.gather(*(page.goto(url) for page, url in zip(pages, urls)))
+finally:
+    await asyncio.gather(*(page.close() for page in pages))
+```
+
+## Navigation readiness and errors
+
+`goto(url, wait_until="networkidle")` waits for strict network idle. A timeout
+raises `NavigationTimeoutError`. Its `url`, `wait_phase`, `timeout`, and
+`elapsed` attributes can be used for retry policy and diagnostics.
+`BrowserClosedError` distinguishes a browser or page closing during navigation.
+
+When a specific DOM element or API route is the meaningful readiness signal,
+use `navigate(url)` and then wait for that signal instead of global network
+idle.
+
+## Capture action-triggered responses
+
+Arm response capture before the click, form submission, or JavaScript action
+that triggers the requests:
+
+```python
+async with page.expect_responses(
+    {
+        "overview": "**/api/overview",
+        "items": "**/api/items*",
+    },
+    timeout=30,
+    max_response_bytes=2_000_000,
+    max_total_bytes=4_000_000,
+) as pending:
+    await page.click_by_role("button", "Load reports")
+
+responses = await pending.value
+overview = await responses["overview"].json()
+items_text = await responses["items"].text()
+```
+
+For one response, use `page.expect_response(pattern, ...)`. Its `pending.value`
+resolves to one `CapturedResponse` instead of a dictionary.
+
+Capture listens to Chrome DevTools Protocol network events. It does not patch
+`fetch` or `XMLHttpRequest`, intercept requests, or poll from page JavaScript.
+Capture is opt-in and in-memory only. VoidCrawl does not automatically log or
+persist response bodies.
+
+## Body states and limits
+
+Each `CapturedResponse` includes `url`, `status`, `headers`, `mime_type`,
+`resource_type`, cache and service-worker flags, and these body properties:
+
+- `body_state == "available"`: the complete body is retained
+- `body_state == "truncated"`: a configured byte limit was reached
+- `body_state == "unavailable"`: Chrome could not provide a body, including a redirect body
+
+Check `body_state`, `truncated`, and `body_error` before parsing when a
+complete payload is required. Access payloads with `await response.bytes()`,
+`await response.text()`, or `await response.json()`.
+
+If all named responses do not arrive before the deadline, the context raises
+`ResponseTimeoutError`. If the page closes, it raises `BrowserClosedError`
+instead of waiting for the full timeout.
+
+## Runnable examples
+
+The VoidCrawl repository includes self-contained examples:
+
+```bash
+uv run python examples/page_lifecycle.py
+uv run python examples/concurrent_resource_tabs.py
+uv run python examples/ahrefs_concurrent_stress.py  # live, may challenge/rate-limit
+uv run python examples/response_capture.py
+uv run python examples/profile_split.py
+uv run python examples/profile_split_headful.py --hold-seconds 20
+```
