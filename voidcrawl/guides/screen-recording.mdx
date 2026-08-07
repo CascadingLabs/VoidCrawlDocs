@@ -27,6 +27,13 @@ faqs:
       Yes. selectors takes a list, and each entry becomes its own cropped region in
       recording.regions. All regions are cut from a single screencast, so recording
       three components of a page costs one recording, not three.
+  - q: Does masking make a recording safe to share?
+    a: >-
+      No. Masking covers exactly the rectangles you name and reports what it covered.
+      It has no classifier and no defaults about what is sensitive, so anything you did
+      not name is still in the frames. Treat it as opt-in redaction driven by whatever
+      decides which regions matter, and check the masks report's stale_frames before
+      sharing an artifact.
   - q: What happens if the element I am recording moves?
     a: >-
       Each selector is resolved to a rectangle once, when recording starts, and that
@@ -120,6 +127,63 @@ rec = await handle.stop()
 
 `duration_secs` becomes a hard upper bound: the recording stops itself at that point even if `stop()` is never called, so a forgotten recording cannot hold the browser open.
 
+## Masking regions
+
+`masks` paints rectangles solid black in every frame, **before** anything is cropped, written or encoded. It exists because there is no other seam: between Chrome compositing a frame and that frame hitting disk, nothing downstream can intervene, so whatever is on screen is already in the artifact by the time anyone else gets a say.
+
+```python
+rec = await page.start_recording(
+    masks=[{"type": "css", "value": "#password"}],
+    dir="./out",
+    encode=["mp4"],
+)
+```
+
+<Aside type="caution">
+VoidCrawl supplies the mechanism, not the judgement. A mask is a rectangle -- there are no classifiers, no presets, no `input[type=password]` special-casing. Masking a recording is not a claim that the recording is clean, only that the rectangles you named were covered. Deciding which regions to name, and whether the result is safe to share, is yours.
+</Aside>
+
+### Fixed rectangles and selectors
+
+A mask is either a literal rectangle or a selector to resolve into one:
+
+```python
+masks=[
+    {"bbox": (100, 240, 320, 32)},                          # no DOM work at all
+    {"selector": {"type": "css", "value": "#token"}},       # resolved for you
+    {"selector": {...}, "track": False, "label": "token"},  # pinned, named
+]
+```
+
+A bare selector dict is shorthand for the second form. Selector masks resolve through the same path as crop selectors, so all eight selector kinds work -- and a mask that matches nothing, is ambiguous or is non-visual fails the call before any frame is captured. An unresolvable mask is a hole in an artifact you believe is covered, so it is never silently skipped.
+
+### Masks track, crops do not
+
+Crop regions are resolved once and held fixed. A crop that drifts is cosmetic; a mask that drifts uncovers the thing it was asked to cover. Selector masks are therefore re-resolved on a timer (at most 5 Hz), and each frame is masked with the rectangles current when it was captured, under two conservative rules:
+
+- a frame is masked with the **union** of the current and previous tick's rectangles, so an element caught mid-scroll is covered in both places;
+- a mask whose selector stops resolving **keeps its last known rectangle** rather than uncovering.
+
+Neither rule is a risk assessment -- both are just "cover more, not less". What actually happened is reported per mask:
+
+| Field | Meaning |
+|---|---|
+| `label` | Name, from `label` or derived from the selector. |
+| `bbox` | The rectangle as first resolved. |
+| `tracked` | Whether it was re-resolved during the recording. |
+| `unresolved_ticks` | Ticks where re-resolution failed (element gone, hidden, ambiguous). |
+| `stale_frames` | Frames captured while the most recent re-resolution had failed. |
+
+A navigation mid-recording is the common source of `unresolved_ticks`: the old document's element is gone, so the mask holds its last rectangle over a page it no longer belongs to. Non-zero `stale_frames` is a signal to look at the artifact before sharing it.
+
+### Cost and caveats
+
+- Masking costs one decode and re-encode per frame -- once per frame, not once per frame per region. An unmasked recording pays nothing.
+- The pixels are covered in-process, after Chrome composited them and after the frame was decoded. They never reach disk, an encoder or a caller, but they do exist in memory first.
+- JPEG is lossy, so a black fill re-encoded at quality 80 is *near*-black rather than exactly `#000`. No original pixel survives either way; use `frame_format="png"` when you want to assert on exact values.
+- `mask_pad` (default 2 CSS pixels) grows each rectangle outward to swallow antialiasing at the edges. Set `0` for the exact rectangle.
+- Masks are orthogonal to crops. Cropping to a form and masking a field inside it is the normal case, and the crop is always cut from an already-masked frame.
+
 ## Concurrency and the window rule
 
 This is the one piece of Chrome behaviour worth understanding before recording at scale.
@@ -190,6 +254,7 @@ Recording length is capped at 120 seconds, and `session_record_start` defaults t
 | Field | Meaning |
 |---|---|
 | `regions` | One per requested region; a single `"viewport"` region by default. |
+| `masks` | One per requested mask; empty means nothing was asked to be covered. |
 | `frames_captured` | Frames kept, per region. |
 | `frames_dropped` | Frames discarded by the `fps` ceiling or the frame cap. |
 | `effective_fps()` | Rate actually achieved. Report this, not the requested `fps`. |
