@@ -1,0 +1,265 @@
+---
+title: Screen Recording
+description: Record a page as timestamped frames, crop several regions at once, and encode to GIF or video.
+faqs:
+  - q: How is recording different from taking repeated screenshots?
+    a: >-
+      Frames come from CDP's Page.startScreencast, which pushes a frame whenever Chrome
+      composites one, rather than from a loop of captureScreenshot calls. That makes it
+      far cheaper per frame and gives real paint timing, but it also means a recording
+      only ever contains the viewport and only produces frames when the page actually
+      repaints.
+  - q: Why did my recording only capture a handful of frames?
+    a: >-
+      Chrome emits a screencast frame when it swaps one, so a static page has almost
+      nothing to send. The fps option is a ceiling, not a floor. Check effective_fps()
+      on the result rather than assuming the requested rate. A recording of a page that
+      is genuinely not animating is supposed to be short.
+  - q: Why is there no full_page option like screenshot has?
+    a: >-
+      A screencast frame is what Chrome composites on screen, and CDP offers no
+      full-page equivalent for it. Use the viewport options to make the visible area
+      larger, or scroll to choose which part of a long page is on screen when recording
+      starts. For the same reason bbox is viewport-relative here, unlike screenshot's
+      page-relative bbox.
+  - q: Can I record several elements at once?
+    a: >-
+      Yes. selectors takes a list, and each entry becomes its own cropped region in
+      recording.regions. All regions are cut from a single screencast, so recording
+      three components of a page costs one recording, not three.
+  - q: What happens if the element I am recording moves?
+    a: >-
+      Each selector is resolved to a rectangle once, when recording starts, and that
+      rectangle is then fixed. An element that moves or resizes drifts out of its crop.
+      This matches screenshot(selector=...) semantics and keeps the per-frame cost at
+      zero DOM round-trips.
+  - q: Does recording block screenshots on other tabs?
+    a: >-
+      It depends on where the tab lives. Chrome composites only the frontmost tab of a
+      window, so a recording on a pooled or shared-window tab must hold the browser-wide
+      capture lock, which blocks sibling captures. A page created with
+      new_page_in_window is alone in its window, cannot be occluded that way, and
+      records concurrently. VoidCrawl detects which case applies and picks the right
+      behaviour automatically.
+  - q: Do I get an MP4 out of the box?
+    a: >-
+      No. Frames are always available, and encoding to GIF, MP4 or WebM is opt-in behind
+      the encode-gif and encode-ffmpeg cargo features. Asking for an encoding whose
+      feature is off raises an error naming the missing feature rather than silently
+      producing nothing, and the frames survive either way.
+references:
+  - title: "Chrome DevTools Protocol: Page.startScreencast"
+    url: https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-startScreencast
+  - title: "Chrome DevTools Protocol: Page.screencastFrame"
+    url: https://chromedevtools.github.io/devtools-protocol/tot/Page/#event-screencastFrame
+  - title: "Chrome DevTools Protocol: Target.createTarget"
+    url: https://chromedevtools.github.io/devtools-protocol/tot/Target/#method-createTarget
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`Page.record()` captures a page as a sequence of timestamped frames. It is the moving-picture counterpart to the [Screenshot API](/voidcrawl/guides/screenshot-api/), and the options deliberately mirror it: same viewport override, same scroll, same crop, same Yosoi selectors. If you can screenshot a region, you can record it by changing one call.
+
+```python
+rec = await page.record(duration_secs=5, fps=10)
+print(f"{rec.frames_captured} frames at {rec.effective_fps():.1f} fps")
+```
+
+## How it differs from a screenshot
+
+Frames come from CDP's `Page.startScreencast`. Three consequences follow, and they shape the whole API.
+
+### Viewport only
+
+A screencast frame is what Chrome composites on screen. There is no `full_page` equivalent, because CDP does not offer one. Use `viewport_width` / `viewport_height` (or `viewport_preset`) to make the visible area bigger, or `scroll_pixels` / `scroll_viewports` to choose which part of a long page is on screen when recording starts.
+
+For the same reason, `bbox` here is **viewport-relative**, unlike the screenshot API's page-relative `bbox`. A page coordinate outside the current viewport has nothing to crop from.
+
+### Frames arrive on paint, not on a clock
+
+Chrome pushes a frame when it swaps one. A static page yields almost nothing; a busy page yields bursts. So `fps` is a **ceiling** applied client-side, never a guarantee.
+
+Every frame carries its real `offset_ms` from the start of the recording, so a downstream encoder can resample honestly instead of pretending the rate was uniform. Frames discarded by the ceiling are counted in `frames_dropped`.
+
+<Aside type="caution">
+Report `effective_fps()`, not the `fps` you asked for. A low frame count on a page that is not animating is correct behaviour, not a fault. A low frame count on a page you know *is* animating is the signal worth investigating.
+</Aside>
+
+### Selectors are plural
+
+A screenshot crops to at most one rectangle. A recording can carry several: each entry in `selectors` becomes its own region with its own cropped frame sequence, all cut from the **same** screencast.
+
+```python
+rec = await page.record(
+    duration_secs=5,
+    selectors=[
+        {"type": "css", "value": "#chart"},
+        {"type": "role", "value": "button", "name": "Play"},
+    ],
+)
+for region in rec.regions:
+    print(region.label, region.bbox, len(region.frames))
+```
+
+Recording three components of a page costs one screencast, not three.
+
+Each selector is resolved to a rectangle **once, when recording starts**, and held fixed from then on. An element that moves or resizes drifts out of its crop. That matches `screenshot(selector=...)` semantics and keeps the per-frame cost at zero DOM round-trips; re-resolving every frame would cap the frame rate on a DOM query.
+
+A selector that matches nothing, is ambiguous, or is inherently non-visual (`jsonld`, `regex`) fails the call *before* any frame is captured, rather than burning the full duration and handing back empty regions.
+
+## Recording an interaction
+
+`record()` is one-shot. To record while you drive the page, start and stop explicitly:
+
+```python
+handle = await page.start_recording(duration_secs=30)
+await page.click("#play")
+await page.type_text("#search", "query")
+rec = await handle.stop()
+```
+
+`duration_secs` becomes a hard upper bound: the recording stops itself at that point even if `stop()` is never called, so a forgotten recording cannot hold the browser open.
+
+## Concurrency and the window rule
+
+This is the one piece of Chrome behaviour worth understanding before recording at scale.
+
+**Chrome composites only the frontmost tab of a window.** Tabs from `new_page()`, and every tab in the pool, share one window. The moment a sibling tab captures (which brings it to the front), the recorded tab stops painting and the screencast goes quiet. Measured on a continuously animating page over 3 seconds:
+
+| Tab placement | Foregrounded | Frames captured |
+|---|---|---|
+| Shared window | no | 1 |
+| Shared window | yes | 27 |
+| **Own window** | **no** | **28** |
+
+The `--disable-backgrounding-occluded-windows` and `--disable-renderer-backgrounding` launch flags do **not** rescue the shared-window case. Occlusion *within* a window is a different mechanism.
+
+So a recording on a shared-window tab has to pin itself to the foreground and hold the browser-wide capture lock for its duration, which blocks screenshots and recordings on every sibling tab of that browser. A tab alone in its window cannot be occluded that way, records at full rate, and needs neither.
+
+You do not have to manage this. `foreground` defaults to auto-detection through `alone_in_window()` and picks the correct behaviour either way. To get the concurrent path, put the page in its own window:
+
+```python
+page = await session.new_page_in_window(url)     # its own browser window
+assert await page.alone_in_window()
+
+rec = await page.record(duration_secs=10)        # runs concurrently
+assert not rec.foregrounded                      # no capture lock taken
+```
+
+<Aside type="caution">
+A plain `new_page()` opens its tab in the **most recently active** window, so creating a page *after* `new_page_in_window()` can drop it inside that window and quietly re-introduce the contention. Create recording windows last, or check `alone_in_window()`. Every result reports `foregrounded` so you can tell which path you got.
+</Aside>
+
+## Output and encoding
+
+A recording always carries its frames. Encoding to a single playable file is opt-in behind cargo features, because the frame sequence is the substrate and the container is a policy choice.
+
+| Encoding | Feature | Notes |
+|---|---|---|
+| `gif` | `encode-gif` | Pure Rust, no external binary. Large files, 256 colours. |
+| `mp4` | `encode-ffmpeg` | H.264 through an `ffmpeg` binary on `PATH`. |
+| `webm` | `encode-ffmpeg` | VP9 through an `ffmpeg` binary on `PATH`. |
+
+```bash
+cargo build --features encode-gif,encode-ffmpeg
+```
+
+```python
+rec = await page.record(duration_secs=5, output_dir="./out", encode=["gif"])
+print(rec.regions[0].outputs)   # ['./out/viewport.gif']
+```
+
+Requesting an encoding whose feature is off raises an error naming the missing feature instead of silently producing nothing, and the frames survive either way. Both encoders drive timing from each frame's real offset rather than assuming a constant rate, so playback matches what the page actually did.
+
+Pass `write_frames=True` to also write individual frames to `output_dir/<region>/00000.jpg`.
+
+## MCP tools
+
+| Tool | Purpose |
+|---|---|
+| `record` | Load a URL and record it for a fixed duration. |
+| `session_record_start` | Begin recording an open session, then drive it. |
+| `session_record_stop` | Finish, write artefacts, return paths and counts. |
+
+These never return frames inline. A recording is hundreds of images, and streaming them would swamp an agent's context, so frames and artefacts are written to disk and the response carries the output directory, per-region paths, and counts. Read a single frame from disk when you need to look at one.
+
+Recording length is capped at 120 seconds, and `session_record_start` defaults to a 30 second bound. Only one recording runs per session at a time; a second start is refused rather than silently discarding the first.
+
+## Result reference
+
+| Field | Meaning |
+|---|---|
+| `regions` | One per requested region; a single `"viewport"` region by default. |
+| `frames_captured` | Frames kept, per region. |
+| `frames_dropped` | Frames discarded by the `fps` ceiling or the frame cap. |
+| `effective_fps()` | Rate actually achieved. Report this, not the requested `fps`. |
+| `duration_ms` | Wall-clock span from screencast start to stop. |
+| `foregrounded` | Whether the capture lock was held. See the window rule above. |
+| `device_pixel_ratio` | For translating frame pixels back to CSS pixels. |
+
+Frames expose `index`, `offset_ms` and `data`. Regions expose `label`, `bbox`, `frames` and `outputs`.
+
+## FAQs
+
+<details>
+<summary>How is recording different from taking repeated screenshots?</summary>
+
+Frames come from CDP's `Page.startScreencast`, which pushes a frame whenever Chrome composites one, rather than from a loop of `captureScreenshot` calls. That is far cheaper per frame and gives real paint timing, but it also means a recording only ever contains the viewport and only produces frames when the page actually repaints.
+
+</details>
+
+<details>
+<summary>Why did my recording only capture a handful of frames?</summary>
+
+Chrome emits a screencast frame when it swaps one, so a static page has almost nothing to send. The `fps` option is a ceiling, not a floor. Check `effective_fps()` on the result rather than assuming the requested rate.
+
+</details>
+
+<details>
+<summary>Why is there no full_page option like screenshot has?</summary>
+
+A screencast frame is what Chrome composites on screen, and CDP offers no full-page equivalent for it. Use the viewport options to make the visible area larger, or `scroll` to choose which part of a long page is on screen when recording starts. For the same reason `bbox` is viewport-relative here.
+
+</details>
+
+<details>
+<summary>Can I record several elements at once?</summary>
+
+Yes. `selectors` takes a list, and each entry becomes its own cropped region in `recording.regions`. All regions are cut from a single screencast, so recording three components costs one recording, not three.
+
+</details>
+
+<details>
+<summary>What happens if the element I am recording moves?</summary>
+
+Each selector is resolved to a rectangle once, when recording starts, and that rectangle is then fixed. An element that moves or resizes drifts out of its crop. This matches `screenshot(selector=...)` semantics and keeps the per-frame cost at zero DOM round-trips.
+
+</details>
+
+<details>
+<summary>Does recording block screenshots on other tabs?</summary>
+
+It depends where the tab lives. A recording on a pooled or shared-window tab must hold the browser-wide capture lock, which blocks sibling captures. A page created with `new_page_in_window()` is alone in its window, cannot be occluded, and records concurrently. VoidCrawl detects which case applies automatically.
+
+</details>
+
+<details>
+<summary>Do I get an MP4 out of the box?</summary>
+
+No. Frames are always available; encoding to GIF, MP4 or WebM is opt-in behind the `encode-gif` and `encode-ffmpeg` cargo features. Asking for an encoding whose feature is off raises an error naming the missing feature rather than silently producing nothing.
+
+</details>
+
+## Related
+
+- [Screenshot API](/voidcrawl/guides/screenshot-api/), the single-frame counterpart with the same crop and viewport options.
+- [Emulation](/voidcrawl/guides/emulation/), for the device presets accepted by `viewport_preset`.
+- [MCP server](/voidcrawl/guides/mcp-server/#tools), the same API exposed over stdio.
+
+## References
+
+△ **Page.startScreencast**. Chrome DevTools Protocol. *The CDP method VoidCrawl's recording API drives.* https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-startScreencast
+
+○ **Page.screencastFrame**. Chrome DevTools Protocol. *The event that delivers each frame and its paint metadata.* https://chromedevtools.github.io/devtools-protocol/tot/Page/#event-screencastFrame
+
+◑ **Target.createTarget**. Chrome DevTools Protocol. *The newWindow flag behind `new_page_in_window`, which is what makes concurrent recording possible.* https://chromedevtools.github.io/devtools-protocol/tot/Target/#method-createTarget
