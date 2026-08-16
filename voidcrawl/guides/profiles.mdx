@@ -95,7 +95,7 @@ from voidcrawl.profiles import with_profile
 
 async def main():
     async with with_profile("Profile 1") as handle:
-        page = await handle.session.new_page("https://linkedin.com/feed")
+        page = await handle.new_page("https://linkedin.com/feed")
         html = await page.content()
         print(len(html))
 
@@ -144,14 +144,14 @@ except ProfileNotFound as e:
 If you need explicit lifecycle control, for example when embedding into another context manager:
 
 ```python
-from voidcrawl.profiles import acquire_profile, release_profile
+from voidcrawl.profiles import acquire_profile
 
 handle = await acquire_profile("Profile 1", lease_timeout=30.0)
 try:
-    page = await handle.session.new_page("https://example.com")
+    page = await handle.new_page("https://example.com")
     ...
 finally:
-    await release_profile(handle)
+    await handle.release()
 ```
 
 ## Design notes

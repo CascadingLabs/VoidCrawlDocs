@@ -1,7 +1,9 @@
 ---
 title: Stealth & Anti-Detection
-description: Human-first low-CDP browser control, lazy instrumentation, and tab routing for VoidCrawl.
+description: Clean launch flags, consistent fingerprints, and the opt-in minimal-CDP mode for clearing Managed Challenges.
 ---
+
+import { Aside } from '@astrojs/starlight/components';
 
 VoidCrawl uses a **minimal-footprint** stealth strategy inspired by
 [zendriver](https://github.com/nicegamer7/zendriver) /
@@ -9,13 +11,19 @@ VoidCrawl uses a **minimal-footprint** stealth strategy inspired by
 default**. The guiding rule: *present a real browser consistently -- don't fake
 things.*
 
+For the hardest gates there is a second, **opt-in** layer that shrinks the CDP
+control channel itself -- see
+[Minimal CDP footprint](#minimal-cdp-footprint-full-page-managed-challenge).
+It is off by default because it trades away response capture.
+
 ## TL;DR (at a glance)
 
 What VoidCrawl does, and why each piece exists:
 
 | Layer | What we do | Why |
 |---|---|---|
-| **Launch flags** | Drop chromiumoxide's `--enable-automation`/`--disable-extensions`; use a nodriver/zendriver-style low-noise flag set | The biggest automation signal lives in launch flags. With `--enable-automation` absent, Chrome reports `navigator.webdriver === false` natively -- no JS patch needed. |
+| **Launch flags** | Drop chromiumoxide's `--enable-automation`/`--disable-extensions`; add `--disable-blink-features=AutomationControlled` plus a curated zendriver/nodriver-derived set | The biggest automation signal lives in launch flags. `AutomationControlled` is what makes `navigator.webdriver` a native **`false`** -- we do **not** patch it in JS. |
+| **CDP surface** | `cdp_mode="normal"` by default; `"minimal"` is opt-in per session | The domains chromiumoxide enables eagerly (`Runtime`, `Network`, …) are themselves tells. Minimal drops them, at the cost of response capture. |
 | **No JS injection** | `addScriptToEvaluateOnNewDocument` is **empty** | Each injected script is itself a fingerprint. We patch nothing in page-world JS. |
 | **UA / Client Hints** | Real UA (Headless stripped), with `navigator.platform` + `userAgentData` (Sec-CH-UA) **derived from that UA** so they agree | A Linux UA with `platform === "Win32"` or empty `brands` is a bot tell. |
 | **GPU** | `--headless=new` + ANGLE + `--disable-gpu-sandbox` -> **hardware** WebGL | Legacy headless renders WebGL with **SwiftShader** (software) -- a strong bot signal. |
@@ -61,7 +69,7 @@ consistent*.
 > (`ax_box_in_frame` / `click_ax_in_frame`) -- the browser-computed accessibility
 > tree descends into closed roots, so a trusted compositor click can drive the
 > widget with no shadow patch. See
-> [Challenge escalation](/VoidCrawl/guides/challenge-escalation/).
+> [Challenge escalation](/voidcrawl/guides/challenge-escalation/).
 
 ## The automation signal is in the launch flags
 
@@ -76,21 +84,36 @@ a bug we fixed, which had silently disabled the whole list).
 |---|---|
 | `--enable-automation` | Literally opts in to automation detection |
 | `--disable-extensions` | Real Chrome always has extension support |
-| `--disable-infobars` | Legacy automation-suppression flag; unnecessary for CDP control and less human-shaped |
 
-### Low-noise flags we add
+### Anti-automation flags we add
 
 | Flag | Purpose |
 |---|---|
-| `--remote-allow-origins=*` | Matches nodriver/zendriver's CDP launch posture |
-| `--disable-features=IsolateOrigins,site-per-process` | Matches nodriver/zendriver's target/frame access posture without enabling extra CDP domains |
-| `--no-first-run`, `--no-service-autorun`, `--no-default-browser-check`, `--no-pings`, `--password-store=basic`, `--homepage=about:blank` | Low-noise first-run/profile hygiene used by nodriver/zendriver |
-| `--disable-breakpad`, `--disable-dev-shm-usage`, `--disable-session-crashed-bubble`, `--disable-search-engine-choice-screen` | Stability/UI hygiene with minimal fingerprint cost |
+| `--disable-blink-features=AutomationControlled` | Removes the automation-controlled Blink feature, so `navigator.webdriver` is a native `false` -- not a JS patch |
+| `--disable-infobars` | Suppresses the "Chrome is being controlled by automated test software" bar |
+| `--disable-features=IsolateOrigins,site-per-process,TranslateUI` | Keeps cross-origin frames in-process so `evaluate_js_in_frame` can reach them, and drops the Translate UI |
+| `--no-pings`, `--disable-component-update`, `--disable-session-crashed-bubble`, `--disable-search-engine-choice-screen`, `--homepage=about:blank` | Suppress automation-ish background behaviour and first-run UI |
+| `--no-first-run`, `--no-service-autorun`, `--no-default-browser-check`, `--password-store=basic`, `--use-mock-keychain` | Profile / first-run hygiene |
 
-We intentionally avoid broad background-networking, renderer-throttling, and
-IPC flags in the human-parity path. `AutomationControlled` is only added for
-launched sessions, where Chrome otherwise reports `navigator.webdriver === true`
-under CDP control; attached/headful Docker sessions omit it.
+Plus the safe noise-reducers kept from chromiumoxide's own list
+(`--disable-background-networking`, `--disable-background-timer-throttling`,
+`--disable-backgrounding-occluded-windows`, `--disable-breakpad`,
+`--disable-client-side-phishing-detection`,
+`--disable-component-extensions-with-background-pages`,
+`--disable-default-apps`, `--disable-dev-shm-usage`, `--disable-hang-monitor`,
+`--disable-ipc-flooding-protection`, `--disable-popup-blocking`,
+`--disable-prompt-on-repost`, `--disable-renderer-backgrounding`,
+`--disable-sync`, `--force-color-profile=srgb`, `--metrics-recording-only`) --
+33 flags in total, defined as `DEFAULT_CHROME_ARGS` in `crates/core/src/session.rs`.
+
+<Aside type="note" title="Cross-origin frames">
+`--disable-features=IsolateOrigins,site-per-process` covers ordinary
+cross-origin frames, but Chrome *field-trial*-isolates a few origins
+(notably `google.com`, hence reCAPTCHA's `bframe`) out-of-process regardless.
+Reaching those is an explicit per-session opt-in --
+`extra_args=["--disable-site-isolation-trials"]` -- rather than a global default,
+so the browser's isolation posture is unchanged for callers who don't need it.
+</Aside>
 
 ## UA / platform / Client-Hints consistency
 
@@ -133,8 +156,8 @@ SwiftShader. The defaults are **vendor-generic** (ANGLE uses whatever
 Intel/AMD/NVIDIA driver the machine has); nothing is hardcoded per vendor.
 
 **In Docker**, hardware GPU additionally needs Mesa drivers in the image +
-`/dev/dri` passthrough -- see [/VoidCrawl/guides/docker/](/VoidCrawl/guides/docker/) and
-[/VoidCrawl/guides/docker/](/VoidCrawl/guides/docker/). Without a GPU passed through, the
+`/dev/dri` passthrough -- see [/voidcrawl/guides/docker/](/voidcrawl/guides/docker/) and
+[/voidcrawl/guides/docker/](/voidcrawl/guides/docker/). Without a GPU passed through, the
 container falls back to SwiftShader.
 
 To force software rendering (or pick a different backend), override
@@ -151,7 +174,7 @@ We inject **no** page-world JS, and we leave these alone:
 | `navigator.userAgent` | We use the real UA (Headless stripped) -- no version mismatch. |
 | WebGL vendor/renderer | The real GPU string (once hardware-accelerated) beats any fake. |
 | `window.chrome.runtime`, `navigator.permissions`, canvas | Default behavior is already correct; spoofing adds detectable noise. |
-| Shadow DOM mode | We do **not** force-open it (it broke Turnstile). Interacting with a challenge widget works via real compositor clicks at pixel coordinates regardless of shadow mode -- locate the target inside a closed root with `ax_box_in_frame` / `click_ax_in_frame` (see [Challenge escalation](/VoidCrawl/guides/challenge-escalation/)). |
+| Shadow DOM mode | We do **not** force-open it (it broke Turnstile). Interacting with a challenge widget works via real compositor clicks at pixel coordinates regardless of shadow mode -- locate the target inside a closed root with `ax_box_in_frame` / `click_ax_in_frame` (see [Challenge escalation](/voidcrawl/guides/challenge-escalation/)). |
 
 ## Headful vs headless (and managed Turnstile)
 
@@ -173,7 +196,7 @@ canaries, headful is necessary but not sufficient:
 
 ```python
 import os
-from VoidCrawl import BrowserPool
+from voidcrawl import BrowserPool
 
 # WAF / managed-Turnstile targets -- headful:
 os.environ["CHROME_HEADLESS"] = "0"
@@ -187,7 +210,7 @@ async with BrowserPool.from_env() as pool:
 ```
 
 For a headless *farm* that still needs to clear Turnstile, run the **headful
-GPU container** ([/VoidCrawl/guides/docker/](/VoidCrawl/guides/docker/)) rather than headless.
+GPU container** ([/voidcrawl/guides/docker/](/voidcrawl/guides/docker/)) rather than headless.
 
 > The full-page **Managed Challenge / Challenge Page** interstitial ("Just a
 > moment…", served by the edge in front of a route) is the hard gate. Headful +
@@ -202,78 +225,159 @@ current Docker canary from this host is challenged for VoidCrawl, nodriver, and
 bare Chrome alike, so use it as a parity benchmark rather than a claim that CDP
 minimization alone can pass every gate.
 
-VoidCrawl now keeps the startup CDP surface low by default. It skips eager
-`Runtime.enable`, `Network.enable`, `Performance.enable`, `Log.enable`, target
-auto-attach, and isolated utility-world setup; `Runtime.evaluate`, navigation,
-accessibility, DOM inspection, and input still work on demand. For launched
-sessions it only keeps the low-CDP-safe parts of `StealthConfig` before
-navigation: UA/Client-Hints, locale, and viewport coherence. It intentionally
-ignores page-world instrumentation fields such as `use_builtin_stealth`,
-`bypass_csp`, and `inject_js`. For attached/remote-debug sessions (the Docker
-headful parity path) it deliberately sends no pre-navigation stealth mutation at
-all, preserving the already-running Chrome's native fingerprint.
+chromiumoxide eagerly enables a set of CDP domains on every target, and each one
+is a tell a clean browser never sends. `cdp_mode="minimal"` skips them:
 
-Benchmark VoidCrawl against nodriver on operator-supplied targets:
+<Aside type="caution" title="What is measured, and what is not">
+Against `2captcha.com/demo/cloudflare-turnstile-challenge` on an AMD-GPU Linux
+host:
+
+| Setup | `"normal"` | `"minimal"` |
+|---|---|---|
+| **Headful** | reaches the destination (3/3) | reaches the destination (3/3) |
+| **Headless** | walled -- `Just a moment…` | walled, identically |
+| **Docker headful**, 40 concurrent ops | 40/40, 3.23s | 40/40, 3.15s |
+
+On this target, from this host, the two modes are **behaviourally equivalent** --
+and the throughput difference is noise. **Minimal is not demonstrated to beat
+normal here.**
+
+The reasoning holds (every domain below is a documented automation tell, and
+enabling fewer cannot make detection *more* likely), so treat minimal as "a
+smaller CDP surface", not a bypass. Whether it changes an outcome is target- and
+environment-specific -- measure it on yours.
+</Aside>
+
+| CDP enable | Why it's a tell | In minimal mode |
+|---|---|---|
+| `Runtime.enable` | Emits `Runtime.consoleAPICalled` and serializes console arguments -- the canonical CDP-automation signal, and observable from page JS | **skipped** -- `Runtime.evaluate` still works in the main world |
+| `Network.enable` | A clean browser doesn't subscribe | **skipped** (lose response capture / network-idle) |
+| `Performance.enable`, `Log.enable` | Eager instrumentation | **skipped** (no loss) |
+| `Target.setAutoAttach(waitForDebuggerOnStart)` | Automation-shaped; observable via child-target startup timing | **skipped** (lose OOPIF auto-attach) |
+| Isolated-world `addScriptToEvaluateOnNewDocument` | A persistent injected script | **skipped** (lose `evaluate_function`) |
+
+```python
+from voidcrawl import BrowserConfig, BrowserSession
+
+async with BrowserSession(
+    BrowserConfig(headless=False, stealth=True, cdp_mode="minimal")
+) as b:
+    page = await b.new_page("about:blank")
+    await page.navigate("https://site-behind-a-cloudflare-challenge.com")
+    # The interstitial clears on its own; poll the title rather than awaiting
+    # network idle, which needs the Network domain:
+    while "just a moment" in (await page.eval_js("document.title")).lower():
+        await asyncio.sleep(1)
+```
+
+The mode is **per session**, so one process can run a minimal session against a
+walled target and a normal session for capture work at the same time. In Rust:
+`BrowserSessionBuilder::minimal_cdp()`, or `.cdp_mode(CdpMode::Minimal)`.
+
+<Aside type="caution" title="What minimal mode costs">
+Nothing errors *silently*, but a lot stops working: response capture
+(`network_capture_arm` / `wait`, CDP request-header capture),
+`wait_for_network_idle`, cross-origin `evaluate_js_in_frame`,
+`evaluate_function`, and OOPIF auto-attach. Those helpers raise
+`CdpDomainNotEnabled` rather than returning empty data -- see
+[Escalating a minimal session](#escalating-a-minimal-session).
+
+**`"normal"` is the default** precisely because these losses are invisible until
+you go looking for missing data.
+</Aside>
+
+<Aside type="tip" title="Measure it on your own targets">
+`scripts/bench_antibot_cdp.py` runs both modes against the same URL and reports
+passed / challenged / blocked plus a fingerprint snapshot, so you can check the
+trade rather than taking the table above on faith:
 
 ```bash
 uv run python scripts/bench_antibot_cdp.py \
   --url https://<cloudflare-managed-challenge-target> \
-  --url https://<datadome-style-target> \
-  --runs 3 --headful
+  --engine voidcrawl --cdp-mode normal --cdp-mode minimal --runs 3 --headful
 ```
 
-Trade-offs (acceptable for *challenge traversal*, not bulk crawling): no eager
-network capture / network-idle `goto`; frame-scoped JavaScript lazily enables
-`Runtime.enable` for in-process frames; and OOPIF auto-attach remains off until
-a future targeted escalation needs it.
+Add `--engine nodriver --engine zendriver` to compare against those drivers when
+they're installed. Targets are operator-supplied; none are committed to the repo.
+</Aside>
 
-## Lazy escalation and tab routing
+The older process-global **`VOIDCRAWL_STEALTH_NO_RUNTIME=1`** environment
+variable still selects minimal mode when no explicit `cdp_mode` is given. Prefer
+`cdp_mode`: the variable applies to every session in the process, so it cannot
+express "minimal here, normal there".
 
-VoidCrawl keeps each tab in a low-CDP state until a high-power feature needs
-more instrumentation. Network-heavy helpers such as `goto(...)`,
-`wait_for_network_idle(...)`, endpoint capture, and `set_headers(...)` lazily
-send `Network.enable` on that tab before they subscribe to network events or
-mutate headers. That gives operators a simple routing rule:
+## Escalating a minimal session
 
-- use fresh/low-CDP tabs for challenge traversal and human-like browsing;
-- use escalated tabs for capture, replay, debugging, and extraction;
-- if a tab has escalated, prefer a fresh tab/browser for the next sensitive
-  gate instead of trying to "un-taint" it.
+A minimal session is not a dead end. `Network.enable` and `Runtime.enable` are
+*runtime* CDP commands, not launch flags, so a tab can start quiet, clear a wall,
+and then be escalated deliberately. This is exactly what Chrome DevTools does
+when you open its Network panel -- and why that panel says **"reload to record"**.
 
-Every `Page` and `PooledTab` exposes `await tab.instrumentation_state()`.
-This is a wrapper-local routing signal: it tells you what the current VoidCrawl
-handle has enabled since it wrapped the target. Adopted tabs from another CDP
-client can have unknown prior instrumentation, so use fresh tabs for the
-highest-sensitivity gates.
+```python
+async with BrowserSession(BrowserConfig(cdp_mode="minimal")) as b:
+    page = await b.new_page("https://walled-site.com")
+    ...                                # quiet CDP surface: no Network domain
+
+    await page.escalate_network()       # explicit, greppable
+    await page.reload()                 # capture starts here
+    caps = await page.expect_responses({"api": "*/api/*"})
+```
+
+<Aside type="caution" title="Capture starts at the enable">
+`Network.enable` only observes traffic that happens *after* it. Escalating after
+a response has already arrived will not retroactively capture it -- escalate,
+then re-navigate (or capture the *next* navigation).
+
+`escalate_network()` deliberately does **not** reload for you: only you know
+whether re-navigating a page that just cleared a challenge is safe.
+</Aside>
+
+Escalation is never automatic. A session launched minimal was launched that way
+on purpose, so the network helpers fail closed with `CdpDomainNotEnabled` --
+naming the method that fixes it -- rather than quietly making the session louder
+or handing back empty data.
+
+| Method | Enables | Page-observable? |
+|---|---|---|
+| `await page.escalate_network()` | `Network` -- response capture, request-header capture, network-idle waits, `set_headers` | **No.** It injects nothing and changes no JS-visible state, so it is the cheap one to turn on late |
+| `await page.escalate_runtime()` | `Runtime` -- frame-scoped `evaluate_js_in_frame` | **Yes.** The most-cited CDP automation tell. Do not escalate Runtime on a tab that still has a challenge to pass |
+
+Both are idempotent and are no-ops under `cdp_mode="normal"`, so mode-agnostic
+code can call them freely.
+
+### Tab routing
+
+`await tab.instrumentation_state()` on any `Page` or `PooledTab` reports what
+that handle has enabled, which gives a simple routing rule: send gates to quiet
+tabs, capture to escalated ones, and reach for a fresh tab rather than trying to
+"un-taint" one.
 
 ```python
 state = await tab.instrumentation_state()
 if state.low_cdp:
     await tab.navigate("https://site-behind-a-managed-challenge.com")
 else:
-    # This tab already enabled instrumentation; use it for capture/debug work.
+    # Already instrumented -- use it for capture / debug work.
     response = await tab.goto("https://example.com", capture_endpoints=True)
 ```
 
-Current state fields:
-
 | Field | Meaning |
 |---|---|
-| `low_cdp` | `True` while no higher-signal CDP domain has been enabled on the tab |
-| `network_enabled` | `True` after `Network.enable` was sent lazily |
-| `runtime_enabled` | `True` after a frame-scoped API lazily sends `Runtime.enable`; `eval_js` uses one-shot `Runtime.evaluate` without enabling Runtime |
-| `utility_world_enabled` | reserved for future isolated-world tracking |
-| `pre_navigation_stealth` | `True` if VoidCrawl applied UA/viewport pre-navigation stealth to the tab |
+| `low_cdp` | `True` while neither high-signal domain is enabled -- the state a `cdp_mode="minimal"` tab starts in |
+| `network_enabled` | `True` after `Network.enable`. Seeded `True` under `cdp_mode="normal"` |
+| `runtime_enabled` | `True` after `Runtime.enable`. `eval_js` uses one-shot `Runtime.evaluate` and does **not** set this |
+
+Escalation is per-tab and does not leak, so a fresh tab from the same session is
+still quiet.
+
+<Aside type="note" title="It is a routing signal, not a security boundary">
+It reports what *this* handle enabled since it wrapped the target. A tab adopted
+from another CDP client may carry instrumentation VoidCrawl cannot see, so prefer
+a fresh tab for the highest-sensitivity gate. Pool tabs are recycled and may
+already have been escalated by earlier work -- check rather than assume.
+</Aside>
 
 ## Overriding the defaults
-
-`BrowserConfig.stealth=True` now means "human-first, low-CDP-safe stealth".
-Launched sessions keep UA/Client-Hints, locale, and viewport coherence, but
-page-world injection knobs (`StealthConfig.use_builtin_stealth`, `bypass_csp`,
-and `inject_js`) are ignored on the default path because they add observable
-pre-navigation CDP mutations. Attached sessions default to preserving the
-existing browser fingerprint; use launched sessions or explicit page APIs for
-deliberate instrumentation.
 
 Every default flag is overridable by the caller -- useful to force a GPU
 backend, disable acceleration, add a proxy bypass, etc. Caller args are merged
@@ -281,7 +385,7 @@ by **switch key**, so a caller value *replaces* the matching default (we don't
 emit duplicate switches -- Chrome's per-switch precedence is inconsistent):
 
 ```python
-from VoidCrawl import BrowserConfig
+from voidcrawl import BrowserConfig
 
 # Force software rendering (e.g. to compare, or on a GPU-less box):
 cfg = BrowserConfig(extra_args=["--use-angle=swiftshader"])
@@ -321,7 +425,7 @@ moment that element is inserted, regardless of network.
 | Akamai WAF (BusinessWire) | chromiumoxide defaults (`--enable-automation`) | 403 |
 | Akamai WAF (BusinessWire) | + heavy JS spoofing + fake UA | 403 |
 | Akamai WAF (BusinessWire) | `disable_default_args` + clean flags + real UA | **Success** |
-| Managed Cloudflare / Turnstile gates | headful, hardware GPU, consistent UA, no JS injection, minimal CDP | Best available posture; final result depends on profile/IP/environment |
+| Managed Cloudflare / Turnstile gates | headful, hardware GPU, consistent UA, no JS injection, plus opt-in `cdp_mode="minimal"` | Best available posture; final result depends on profile/IP/environment |
 | Docker Cloudflare canary from this host | VoidCrawl, nodriver, and bare Chrome | All challenged (`Just a moment…`) |
 | Managed Cloudflare / Turnstile gates | headless | Usually gated |
 
